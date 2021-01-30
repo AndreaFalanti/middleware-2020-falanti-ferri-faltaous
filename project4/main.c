@@ -55,13 +55,67 @@ void moveIndividuals(individual *individuals, int N, int W, int L) {
     }
 }
 
-void performSimulationStep(individual *individuals, node_ind **infected_list, int N, int W, int L, int t) {
+void updateIndividualStatus(individual *el, node_ind **infected_list, int t, float d) {
+    bool exposure = false;
+    node_ind *head_temp = *infected_list;
+    int exposure_time = t;
+
+    if (el->status == infected) {
+        el->statusCumulatedTime += t;
+        if (el->statusCumulatedTime >= INFECTION_TIME) {
+            // extra time is converted into time of immunity
+            el->statusCumulatedTime = el->statusCumulatedTime % INFECTION_TIME;
+            el->status = immune;
+
+            // TODO: remove from list of infected individuals
+        }
+    }
+    else if (el->status == immune) {
+        el->statusCumulatedTime += t;
+        if (el->statusCumulatedTime >= IMMUNE_TIME) {
+            // extra time is converted into possible time of exposure
+            exposure_time = el->statusCumulatedTime % IMMUNE_TIME;
+            el->statusCumulatedTime = 0;
+            el->status = susceptible;
+        }
+    }
+
+    // both cases in which was already susceptible or it become susceptible from immune status in this simulation step 
+    if (el->status == susceptible) {
+        while (head_temp != NULL && !exposure) {
+            if (computeDistance(el->pos, head_temp->ind->pos) <= d) {
+                exposure = true;
+                el->statusCumulatedTime += exposure_time;
+                if (el->statusCumulatedTime >= INFECTION_THRESHOLD) {
+                    el->statusCumulatedTime = el->statusCumulatedTime % INFECTION_THRESHOLD;
+                    el->status = infected;
+
+                    node_ind *new_el = buildIndividualListNode(el);
+                    headInsertIndividualList(infected_list, new_el);
+                }
+            }
+
+            head_temp = head_temp->next;
+        }
+
+        // if not in prossimity of any infected individual, reset the counter
+        if (!exposure) {
+            el->statusCumulatedTime = 0;
+        }   
+    }
+}
+
+void performSimulationStep(individual *individuals, node_ind **infected_list, int N, int W, int L, int t, int d) {
+    for (int i = 0; i < N; i++) {
+        updateIndividualStatus(&individuals[i], infected_list, t, d);
+    }
     moveIndividuals(individuals, N, W, L);
 
     printf("----------- Simulation step --------------\n");
     for (int i = 0; i < N; i++) {
         printIndividualState(individuals[i]);
     }
+    // print list of infected individuals
     printIndividualList(*infected_list);
     printf("-------------------------------------------------------------------\n\n");
 }
@@ -79,7 +133,7 @@ int main(int argc, char** argv) {
     int w = 3, l = 3;
     /* maximum spreading distance (in meters): a susceptible individual
     that remains closer than d to at least one infected individual becomes infected */
-    float d = 2;
+    float d = 1;
     /* time step (in seconds): the simulation recomputes the position and status (susceptible, 
      infected, immune) of each individual with a temporal granularity of t (simulated) seconds */
     int t = 5;
@@ -109,7 +163,7 @@ int main(int argc, char** argv) {
     // TODO: make an assumption on how much steps to do
     int simulation_steps = 10;
     for (int i = 0; i < simulation_steps; i++) {
-        performSimulationStep(individuals, &infected_list, N, W, L, t);
+        performSimulationStep(individuals, &infected_list, N, W, L, t, d);
     }
 
 /* TODO: define the MPI part to parallelize the simulation when the rest is ready

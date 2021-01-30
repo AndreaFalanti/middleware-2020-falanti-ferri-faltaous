@@ -1,24 +1,69 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <stdbool.h>
 //#include <mpi.h>
-#include "individual.h"
+//#include "individual.h"
+#include "individual_list.h"
+#include "error_codes.h"
 
-#define INFECTION_THRESHOLD 60 * 10         //10 minutes
-#define INFECTION_TIME 60 * 60 * 24 * 10    //10 days
+#define INFECTION_THRESHOLD 60 * 10         // 10 minutes
+#define INFECTION_TIME 60 * 60 * 24 * 10    // 10 days
 #define IMMUNE_TIME 60 * 60 * 24 * 30 * 3   // 3 months
 
-void initializeIndividuals(individual *individuals, /*individual **infected_head,*/ int N, int I, int W, int L) {
+void initializeIndividuals(individual *individuals, node_ind **infected_head, int N, int I, int W, int L) {
     for (int i = 0; i < N; i++) {
         if (I > 0) {
             individuals[i].status = infected;
+            node_ind* el = buildIndividualListNode(&individuals[i]);
+            headInsertIndividualList(infected_head, el);
             I--;
         }
+        individuals[i].id = i;
+
         individuals[i].pos.x = (rand() % (W * 1000)) / 1000.0;
         individuals[i].pos.y = (rand() % (L * 1000)) / 1000.0;
 
+        // TODO: should be provided by input in next versions, just for testing with random values
+        individuals[i].vel.x = (rand() % (W * 1000)) / 10000.0;
+        individuals[i].vel.y = (rand() % (L * 1000)) / 10000.0;
+
         printIndividualState(individuals[i]);
     }
+}
+
+bool isMovementOutOfBounds(individual *el, int W, int L) {
+    return (el->pos.x + el->vel.x > W) || (el->pos.y + el->vel.y > L);
+}
+
+void invertIndividualVelocity(individual *el) {
+    el->vel.x = -el->vel.x;
+    el->vel.y = -el->vel.y;
+}
+
+void updateIndividualPosition(individual *el) {
+    el->pos.x += el->vel.x;
+    el->pos.y += el->vel.y;
+}
+
+void moveIndividuals(individual *individuals, int N, int W, int L) {
+    for (int i = 0; i < N; i++) {
+        if (isMovementOutOfBounds(&individuals[i], W, L)) {
+            invertIndividualVelocity(&individuals[i]);
+        }
+        updateIndividualPosition(&individuals[i]);
+    }
+}
+
+void performSimulationStep(individual *individuals, node_ind **infected_list, int N, int W, int L, int t) {
+    moveIndividuals(individuals, N, W, L);
+
+    printf("----------- Simulation step --------------\n");
+    for (int i = 0; i < N; i++) {
+        printIndividualState(individuals[i]);
+    }
+    printIndividualList(*infected_list);
+    printf("-------------------------------------------------------------------\n\n");
 }
 
 int main(int argc, char** argv) {
@@ -41,21 +86,31 @@ int main(int argc, char** argv) {
 
     if (I > N) {
         printf("Infected individuals can't be higher that total individuals!\n");
-        exit(-1);
+        exit(INVALID_ARG);
     }
     if (W < 0 || L < 0 || w < 0 || l < 0 || d < 0) {
         printf("Dimensions can't be negative!\n");
-        exit(-1);
+        exit(INVALID_ARG);
     }
     if (t <= 0) {
         printf("Time step can't be negative or null!\n");
-        exit(-1);
+        exit(INVALID_ARG);
     }
 
     individual *individuals;
     individuals = (individual*) malloc(N * sizeof(individual));
+    node_ind *infected_list = NULL;
 
-    initializeIndividuals(individuals, N, I, W, L);
+    printf("------ Initial state --------\n");
+    initializeIndividuals(individuals, &infected_list, N, I, W, L);
+    printIndividualList(infected_list);
+    printf("-------------------------------------------------------------------\n\n");
+
+    // TODO: make an assumption on how much steps to do
+    int simulation_steps = 10;
+    for (int i = 0; i < simulation_steps; i++) {
+        performSimulationStep(individuals, &infected_list, N, W, L, t);
+    }
 
 /* TODO: define the MPI part to parallelize the simulation when the rest is ready
 

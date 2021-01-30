@@ -7,8 +7,10 @@ typedef struct tuple {
 } tuple;
 
 typedef struct {
+    // id of the individual, used in particular to find correspondent element in infected list
+    int id;
     // moving speed
-    tuple v;
+    tuple vel;
 	// position
     tuple pos;
     enum STATUS status;

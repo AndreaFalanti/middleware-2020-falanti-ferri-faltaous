@@ -9,5 +9,5 @@ typedef struct node_ind {
 node_ind* buildIndividualListNode(individual* ind);
 void headInsertIndividualList(node_ind **l, node_ind *el);
 void tailInsertIndividualList(node_ind **l, node_ind *el);
-int pop(node_ind **head);
+void removeNodeWithId(node_ind **head, int search_id);
 void printIndividualList(node_ind *head);

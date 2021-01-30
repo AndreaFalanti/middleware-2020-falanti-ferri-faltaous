@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "individual_list.h"
 #include "error_codes.h"
 
@@ -44,21 +45,32 @@ void tailInsertIndividualList(node_ind **l, node_ind *el) {
     }
 }
 
-// remove from head
-int pop(node_ind **head) {
-    int retval = -1;
-    node_ind *next_node = NULL;
+void removeNodeWithId(node_ind **head, int search_id) {
+    node_ind *temp = *head;
+    node_ind *prev = NULL;
+    bool deleted = false;
 
-    if (*head == NULL) {
-        return -1;
+    while (!deleted && temp != NULL) {
+        if (temp->ind->id == search_id) {
+            // remove first list element, modifying the head
+            if (prev == NULL) {
+                *head = temp->next;
+            }
+            // remove element from list and memory
+            else {
+                prev->next = temp->next;
+                free(temp);
+            }
+
+            deleted = true;
+        }
+        prev = temp;
+        temp = temp->next;
     }
 
-    next_node = (*head)->next;
-    retval = (*head)->ind;
-    free(*head);
-    *head = next_node;
-
-    return retval;
+    if (!deleted) {
+        printf("ID: %d not found!", search_id);
+    }
 }
 
 void printIndividualList(node_ind *head) {

@@ -46,6 +46,7 @@ void updateIndividualPosition(individual *el) {
     el->pos.y += el->vel.y;
 }
 
+// move all individuals, based on their actual speed
 void moveIndividuals(individual *individuals, int N, int W, int L) {
     for (int i = 0; i < N; i++) {
         if (isMovementOutOfBounds(&individuals[i], W, L)) {
@@ -55,6 +56,7 @@ void moveIndividuals(individual *individuals, int N, int W, int L) {
     }
 }
 
+// update status timer of individual, potentially triggering a status change when conditions are met
 void updateIndividualStatus(individual *el, node_ind **infected_list, int t, float d) {
     bool exposure = false;
     node_ind *head_temp = *infected_list;
@@ -67,7 +69,7 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
             el->statusCumulatedTime = el->statusCumulatedTime % INFECTION_TIME;
             el->status = immune;
 
-            // TODO: remove from list of infected individuals
+            removeNodeWithId(infected_list, el->id);
         }
     }
     else if (el->status == immune) {
@@ -105,6 +107,7 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
     }
 }
 
+// compute status updates for each individual, move them and print various debug information
 void performSimulationStep(individual *individuals, node_ind **infected_list, int N, int W, int L, int t, int d) {
     for (int i = 0; i < N; i++) {
         updateIndividualStatus(&individuals[i], infected_list, t, d);

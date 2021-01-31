@@ -45,6 +45,9 @@ void tailInsertIndividualList(node_ind **l, node_ind *el) {
     }
 }
 
+// TODO: making the list bidirectional would improve a lot the remove operation, because the list is
+// ordered in crescent order of infection time (infects inserted in head), so searching from tail would make
+// it O(1) instead of O(n)
 void removeNodeWithId(node_ind **head, int search_id) {
     node_ind *temp = *head;
     node_ind *prev = NULL;

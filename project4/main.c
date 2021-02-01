@@ -151,8 +151,10 @@ void performSimulationStep(individual *individuals, node_ind **infected_list, in
 
 // TODO: refactor inputs as global variables or a struct to avoid huge amount of parameters in declaration
 void printSimulationStatus(individual *individuals, node_ind **infected_list, int N,
-                            country_report **cr, int xc, int yc, int w, int l, long total_simulation_time) {
-    printf("----------- Simulation step (time: %ld) --------------\n", total_simulation_time);
+                            country_report **cr, int xc, int yc, int w, int l,
+                            long total_simulation_time, int simulated_days, FILE *out_file) {
+    fprintf(out_file, "----------- Simulation step (day: %d, total time: %ld) --------------\n",
+        simulated_days, total_simulation_time);
     // for (int i = 0; i < N; i++) {
     //     printIndividualState(individuals[i]);
     // }
@@ -161,8 +163,8 @@ void printSimulationStatus(individual *individuals, node_ind **infected_list, in
     // printIndividualList(*infected_list);
 
     computeCountriesStatus(cr, xc, yc, individuals, N, w, l);
-    printCountryReports(cr, xc, yc);
-    printf("-------------------------------------------------------------------\n\n");
+    printCountryReports(cr, xc, yc, out_file);
+    fprintf(out_file, "-------------------------------------------------------------------\n\n");
 }
 
 int main(int argc, char** argv) {
@@ -230,6 +232,12 @@ int main(int argc, char** argv) {
     long total_simulation_time = 0;
     int simulated_days = 0;
 
+    FILE *f = fopen("output.txt", "w");
+    if (f == NULL) {
+        printf("Error while opening output file!\n");
+        exit(FILE_ERROR);
+    }
+
     clock_t begin = clock();
 
     for (int i = 0; i < simulation_steps; i++) {
@@ -239,14 +247,19 @@ int main(int argc, char** argv) {
         // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
         if (floor(total_simulation_time / DAY) > simulated_days) {
             simulated_days += 1;
+            printf("Days simulated: %d\n", simulated_days);
             printSimulationStatus(individuals, &infected_list, N,
-                country_matrix, x_countries, y_countries, w, l, total_simulation_time);
+                country_matrix, x_countries, y_countries, w, l,
+                total_simulation_time, simulated_days, f);
         }
     }
 
     clock_t end = clock();
     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
     printf("Simulation time: %g seconds\n", time_spent);
+
+    fclose(f);
+    // TODO: should free vectors and lists?
 
     return 0;
 

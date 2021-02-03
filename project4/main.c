@@ -3,7 +3,7 @@
 #include <time.h>
 #include <stdbool.h>
 #include <math.h>
-//#include <mpi.h>
+#include <mpi.h>
 //#include "individual.h"
 #include "sim_params.h"
 #include "individual_list.h"
@@ -68,21 +68,21 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
     int exposure_time = t;
 
     if (el->status == infected) {
-        el->statusCumulatedTime += t;
-        if (el->statusCumulatedTime >= INFECTION_TIME) {
+        el->status_cumulated_time += t;
+        if (el->status_cumulated_time >= INFECTION_TIME) {
             // extra time is converted into time of immunity
-            el->statusCumulatedTime = el->statusCumulatedTime % INFECTION_TIME;
+            el->status_cumulated_time = el->status_cumulated_time % INFECTION_TIME;
             el->status = immune;
 
             removeNodeWithId(infected_list, el->id);
         }
     }
     else if (el->status == immune) {
-        el->statusCumulatedTime += t;
-        if (el->statusCumulatedTime >= IMMUNE_TIME) {
+        el->status_cumulated_time += t;
+        if (el->status_cumulated_time >= IMMUNE_TIME) {
             // extra time is converted into possible time of exposure
-            exposure_time = el->statusCumulatedTime % IMMUNE_TIME;
-            el->statusCumulatedTime = 0;
+            exposure_time = el->status_cumulated_time % IMMUNE_TIME;
+            el->status_cumulated_time = 0;
             el->status = susceptible;
         }
     }
@@ -92,9 +92,9 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
         while (head_temp != NULL && !exposure) {
             if (computeDistance(el->pos, head_temp->ind->pos) <= d) {
                 exposure = true;
-                el->statusCumulatedTime += exposure_time;
-                if (el->statusCumulatedTime >= INFECTION_THRESHOLD) {
-                    el->statusCumulatedTime = el->statusCumulatedTime % INFECTION_THRESHOLD;
+                el->status_cumulated_time += exposure_time;
+                if (el->status_cumulated_time >= INFECTION_THRESHOLD) {
+                    el->status_cumulated_time = el->status_cumulated_time % INFECTION_THRESHOLD;
                     el->status = infected;
 
                     node_ind *new_el = buildIndividualListNode(el);
@@ -107,7 +107,7 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
 
         // if not in prossimity of any infected individual, reset the counter
         if (!exposure) {
-            el->statusCumulatedTime = 0;
+            el->status_cumulated_time = 0;
         }   
     }
 }
@@ -211,80 +211,83 @@ country_report** allocateCountryMatrix(sim_params *params) {
 }
 
 int main(int argc, char** argv) {
-    // srand((unsigned int)time(NULL));
-    // fixed seed to have easier time estimation
-    srand(123);
-    sim_params params;
+    // srand(123);
+    // sim_params params;
 
-    FILE *fi = fopen("input.txt", "r");
-    if (fi == NULL) {
-        printf("Error while opening input file!\n");
-        exit(FILE_ERROR);
-    }
+    // FILE *fi = fopen("input.txt", "r");
+    // if (fi == NULL) {
+    //     printf("Error while opening input file!\n");
+    //     exit(FILE_ERROR);
+    // }
 
-    readInputParamsFromFile(fi, &params);
-    checkParametersConstraints(params);
+    // readInputParamsFromFile(fi, &params);
+    // checkParametersConstraints(params);
 
-    country_report **country_matrix = allocateCountryMatrix(&params);
+    // country_report **country_matrix = allocateCountryMatrix(&params);
 
-    // allocate individuals vector
-    individual *individuals;
-    individuals = (individual*) malloc(params.N * sizeof(individual));
-    node_ind *infected_list = NULL;
+    // // allocate individuals vector
+    // individual *individuals;
+    // individuals = (individual*) malloc(params.N * sizeof(individual));
+    // node_ind *infected_list = NULL;
 
-    printf("------ Initial state --------\n");
-    initializeIndividuals(fi, individuals, &infected_list, params);
-    printIndividualList(infected_list);
-    printf("-------------------------------------------------------------------\n\n");
+    // printf("------ Initial state --------\n");
+    // initializeIndividuals(fi, individuals, &infected_list, params);
+    // printIndividualList(infected_list);
+    // printf("-------------------------------------------------------------------\n\n");
 
-    // TODO: make an assumption on how much steps to do
-    long simulation_time = 60 * 60 * 24 * 10;   // 10 days
-    int simulation_steps = ceil(simulation_time / params.t);
-    long total_simulation_time = 0;
-    int simulated_days = 0;
+    // free(fi);
 
-    FILE *fo = fopen("output.txt", "w");
-    if (fo == NULL) {
-        printf("Error while opening output file!\n");
-        exit(FILE_ERROR);
-    }
+    // // TODO: make an assumption on how much steps to do
+    // long simulation_time = 60 * 60 * 24 * 10;   // 10 days
+    // int simulation_steps = ceil(simulation_time / params.t);
+    // long total_simulation_time = 0;
+    // int simulated_days = 0;
 
-    clock_t begin = clock();
+    // FILE *fo = fopen("output.txt", "w");
+    // if (fo == NULL) {
+    //     printf("Error while opening output file!\n");
+    //     exit(FILE_ERROR);
+    // }
 
-    for (int i = 0; i < simulation_steps; i++) {
-        performSimulationStep(individuals, &infected_list, params);
-        total_simulation_time += params.t;
+    // clock_t begin = clock();
 
-        // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
-        if (floor(total_simulation_time / DAY) > simulated_days) {
-            simulated_days += 1;
-            printf("Days simulated: %d\n", simulated_days);
-            printSimulationStatus(individuals, &infected_list, country_matrix, params,
-                total_simulation_time, simulated_days, fo);
-        }
-    }
+    // for (int i = 0; i < simulation_steps; i++) {
+    //     performSimulationStep(individuals, &infected_list, params);
+    //     total_simulation_time += params.t;
 
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-    printf("Simulation time: %g seconds\n", time_spent);
+    //     // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
+    //     if (floor(total_simulation_time / DAY) > simulated_days) {
+    //         simulated_days += 1;
+    //         printf("Days simulated: %d\n", simulated_days);
+    //         printSimulationStatus(individuals, &infected_list, country_matrix, params,
+    //             total_simulation_time, simulated_days, fo);
+    //     }
+    // }
 
-    fclose(fo);
-    // TODO: should free vectors and lists?
+    // clock_t end = clock();
+    // double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+    // printf("Simulation time: %g seconds\n", time_spent);
 
-    return 0;
+    // fclose(fo);
+    // // TODO: should free vectors and lists?
 
-/* TODO: define the MPI part to parallelize the simulation when the rest is ready
+    // return 0;
+
+    // TODO: define the MPI part to parallelize the simulation when the rest is ready
 
     // Init the MPI environment
     MPI_Init(NULL, NULL);
 
-    // Get the number of processes
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    // Commit MPI datatype versions of structs used by the program
+    MPI_Datatype MPI_SIM_PARAMS, MPI_TUPLE, MPI_INDIVIDUAL;
+    commitSimParamsTypeMPI(&MPI_SIM_PARAMS);
+    commitTupleTypeMPI(&MPI_TUPLE);
+    commitIndividualTypeMPI(&MPI_INDIVIDUAL, MPI_TUPLE);
 
-    // Get the rank of the process
-    int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    // Get the number of processes
+    int processor_rank, world_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &processor_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
     // Get the name of the processor
     char processor_name[MPI_MAX_PROCESSOR_NAME];
@@ -292,8 +295,57 @@ int main(int argc, char** argv) {
     MPI_Get_processor_name(processor_name, &name_len);
 
     // Print off a hello world message
-    printf("Hello world from processor %s (rank %d out of %d)\n", processor_name, world_rank, world_size);
+    printf("Processor %s online (rank %d out of %d)\n", processor_name, processor_rank, world_size);
+
+    srand(123);
+    sim_params params;
+    individual *individuals;
+    individual *process_individuals;
+    node_ind *infected_list = NULL;
+
+    int *sizes = NULL;
+
+    // only root reads the input file
+    if (processor_rank == 0) {
+        FILE *fi = fopen("input.txt", "r");
+        if (fi == NULL) {
+            printf("Error while opening input file!\n");
+            exit(FILE_ERROR);
+        }
+
+        readInputParamsFromFile(fi, &params);
+        checkParametersConstraints(params);
+
+        individuals = (individual*) malloc(params.N * sizeof(individual));
+        printf("------ Initial state --------\n");
+        initializeIndividuals(fi, individuals, &infected_list, params);
+        printIndividualList(infected_list);
+        printf("-------------------------------------------------------------------\n\n");
+
+        // compute correct sizes for each partition (will be used in scatterv later)
+        sizes = (int*)malloc(world_size * sizeof(int));
+        int rest = params.N % world_size;
+        for (int i = 0; i < world_size; i++) {
+            sizes[i] = params.N / world_size;
+            if (rest > 0) {
+                sizes[i]++;
+                rest--;
+            }
+            printf("%d ", sizes[i]);
+        }
+
+        fclose(fi);
+    }
+
+    MPI_Bcast(&params, 1, MPI_SIM_PARAMS, 0, MPI_COMM_WORLD);
+    printf("\n");
+    printf("Processor %d: %d %d %d %d %f\n", processor_rank, params.N, params.I, params.w, params.l, params.d);
+
+    country_report **country_matrix = allocateCountryMatrix(&params);
+    process_individuals = (individual*) malloc(params.N / world_size * sizeof(individual));
+
+    //MPI_Scatterv(individuals, sizes, sizes, )
 
     // Finalize the MPI environment
-    MPI_Finalize(); */
+    MPI_Finalize();
 }

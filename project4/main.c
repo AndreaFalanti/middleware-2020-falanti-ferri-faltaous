@@ -5,6 +5,7 @@
 #include <math.h>
 //#include <mpi.h>
 //#include "individual.h"
+#include "sim_params.h"
 #include "individual_list.h"
 #include "country_report.h"
 #include "error_codes.h"
@@ -14,22 +15,19 @@
 #define IMMUNE_TIME (60 * 60 * 24 * 30 * 3)   // 3 months (7.776.000)
 #define DAY (60 * 60 * 24)                    // 86.400 seconds
 
-void initializeIndividuals(individual *individuals, node_ind **infected_head, int N, int I, int W, int L) {
-    for (int i = 0; i < N; i++) {
-        if (I > 0) {
+void initializeIndividuals(FILE *fi, individual *individuals, node_ind **infected_head, sim_params params) {
+    for (int i = 0; i < params.N; i++) {
+        if (params.I > 0) {
             individuals[i].status = infected;
             node_ind* el = buildIndividualListNode(&individuals[i]);
             headInsertIndividualList(infected_head, el);
-            I--;
+            params.I--;
         }
         individuals[i].id = i;
 
-        individuals[i].pos.x = (rand() % (W * 1000)) / 1000.0;
-        individuals[i].pos.y = (rand() % (L * 1000)) / 1000.0;
-
-        // TODO: should be provided by input in next versions, just for testing with random values
-        individuals[i].vel.x = (rand() % (W * 1000)) / 100000.0;
-        individuals[i].vel.y = (rand() % (L * 1000)) / 100000.0;
+        // read pos and vel from file
+        fscanf(fi, "%f %f %f %f", &individuals[i].pos.x, &individuals[i].pos.y, &individuals[i].vel.x, &individuals[i].vel.y);
+        fgetc(fi);
 
         printIndividualState(individuals[i]);
     }
@@ -114,19 +112,19 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
     }
 }
 
-void computeCountriesStatus(country_report **cr_matrix, int X, int Y, individual *individuals, int N, int w, int l) {
-    for (int i = 0; i < Y; i++) {
-        for (int j = 0; j < X; j++) {
+void computeCountriesStatus(country_report **cr_matrix, individual *individuals, sim_params params) {
+    for (int i = 0; i < params.yc; i++) {
+        for (int j = 0; j < params.xc; j++) {
             // reset counters
             cr_matrix[i][j].susceptible = 0;
             cr_matrix[i][j].infected = 0;
-            cr_matrix[i][j].susceptible = 0;
+            cr_matrix[i][j].immune = 0;
         }
     }
 
-    for (int i = 0; i < N; i++) {
-        int xc = floor(individuals[i].pos.x / l);
-        int yc = floor(individuals[i].pos.y / w);
+    for (int i = 0; i < params.N; i++) {
+        int xc = floor(individuals[i].pos.x / params.l);
+        int yc = floor(individuals[i].pos.y / params.w);
 
         enum STATUS status = individuals[i].status;
         if (status == susceptible) {
@@ -142,16 +140,15 @@ void computeCountriesStatus(country_report **cr_matrix, int X, int Y, individual
 }
 
 // compute status updates for each individual, move them and print various debug information
-void performSimulationStep(individual *individuals, node_ind **infected_list, int N, int W, int L, int t, int d) {
-    for (int i = 0; i < N; i++) {
-        updateIndividualStatus(&individuals[i], infected_list, t, d);
+void performSimulationStep(individual *individuals, node_ind **infected_list, sim_params params) {
+    for (int i = 0; i < params.N; i++) {
+        updateIndividualStatus(&individuals[i], infected_list, params.t, params.d);
     }
-    moveIndividuals(individuals, N, W, L); 
+    moveIndividuals(individuals, params.N, params.W, params.L); 
 }
 
 // TODO: refactor inputs as global variables or a struct to avoid huge amount of parameters in declaration
-void printSimulationStatus(individual *individuals, node_ind **infected_list, int N,
-                            country_report **cr, int xc, int yc, int w, int l,
+void printSimulationStatus(individual *individuals, node_ind **infected_list, country_report **cr, sim_params params,
                             long total_simulation_time, int simulated_days, FILE *out_file) {
     fprintf(out_file, "----------- Simulation step (day: %d, total time: %ld) --------------\n",
         simulated_days, total_simulation_time);
@@ -162,78 +159,92 @@ void printSimulationStatus(individual *individuals, node_ind **infected_list, in
     // print list of infected individuals
     // printIndividualList(*infected_list);
 
-    computeCountriesStatus(cr, xc, yc, individuals, N, w, l);
-    printCountryReports(cr, xc, yc, out_file);
+    computeCountriesStatus(cr, individuals, params);
+    printCountryReports(cr, params.xc, params.yc, out_file);
     fprintf(out_file, "-------------------------------------------------------------------\n\n");
+}
+
+void readInputParamsFromFile(FILE *fi, sim_params *params) {
+    // read paramters from input, fgetc used to read the \n
+    fscanf(fi, "%d %d", &params->N, &params->I);
+    fgetc(fi);
+    fscanf(fi, "%d %d %d %d", &params->W, &params->L, &params->w, &params->l);
+    fgetc(fi);
+    fscanf(fi, "%f %d", &params->d, &params->t);
+    fgetc(fi);
+    fgetc(fi);
+}
+
+void checkParametersConstraints(sim_params params) {
+    if (params.I > params.N) {
+        printf("Infected individuals can't be higher that total individuals!\n");
+        exit(INVALID_ARG);
+    }
+    if (params.W < 0 || params.L < 0 || params.w < 0 || params.l < 0 || params.d < 0) {
+        printf("Dimensions can't be negative!\n");
+        exit(INVALID_ARG);
+    }
+    if (params.t <= 0) {
+        printf("Time step can't be negative or null!\n");
+        exit(INVALID_ARG);
+    }
+    if (params.w > params.W || params.l > params.L) {
+        printf("Invalid country dimensions!");
+        exit(INVALID_ARG);
+    }
+}
+
+country_report** allocateCountryMatrix(sim_params *params) {
+    // compute the number of countries per axis 
+    params->xc = ceil(params->L / (float)params->l);
+    params->yc = ceil(params->W / (float)params->w);
+
+    // allocate country matrix
+    country_report **country_matrix;
+    country_matrix = (country_report**)malloc(params->yc * sizeof(country_report*));
+
+    for (int i = 0; i < params->yc; i++) {
+        country_matrix[i] = (country_report*)malloc(params->xc * sizeof(country_report));
+    }
+
+    return country_matrix;
 }
 
 int main(int argc, char** argv) {
     // srand((unsigned int)time(NULL));
     // fixed seed to have easier time estimation
     srand(123);
+    sim_params params;
 
-    // number of individuals
-    int N = 1000;
-    // number of individuals that are initially infected 
-    int I = 30;
-    // width and length of the rectangular area where individuals move (in meters) 
-    int W = 100, L = 100;
-    // width and length of each country (in meters)
-    int w = 25, l = 25;
-    /* maximum spreading distance (in meters): a susceptible individual
-    that remains closer than d to at least one infected individual becomes infected */
-    float d = 1.5;
-    /* time step (in seconds): the simulation recomputes the position and status (susceptible, 
-     infected, immune) of each individual with a temporal granularity of t (simulated) seconds */
-    int t = 50;
-
-    if (I > N) {
-        printf("Infected individuals can't be higher that total individuals!\n");
-        exit(INVALID_ARG);
-    }
-    if (W < 0 || L < 0 || w < 0 || l < 0 || d < 0) {
-        printf("Dimensions can't be negative!\n");
-        exit(INVALID_ARG);
-    }
-    if (t <= 0) {
-        printf("Time step can't be negative or null!\n");
-        exit(INVALID_ARG);
-    }
-    if (w > W || l > L) {
-        printf("Invalid country dimensions!");
-        exit(INVALID_ARG);
+    FILE *fi = fopen("input.txt", "r");
+    if (fi == NULL) {
+        printf("Error while opening input file!\n");
+        exit(FILE_ERROR);
     }
 
-    // compute the number of countries per axis 
-    int x_countries = ceil(L / (float)l);
-    int y_countries = ceil(W / (float)w);
+    readInputParamsFromFile(fi, &params);
+    checkParametersConstraints(params);
 
-    // allocate country matrix
-    country_report **country_matrix;
-    country_matrix = (country_report**)malloc(y_countries * sizeof(country_report*));
-
-    for (int i = 0; i < y_countries; i++) {
-        country_matrix[i] = (country_report*)malloc(x_countries * sizeof(country_report));
-    }
+    country_report **country_matrix = allocateCountryMatrix(&params);
 
     // allocate individuals vector
     individual *individuals;
-    individuals = (individual*) malloc(N * sizeof(individual));
+    individuals = (individual*) malloc(params.N * sizeof(individual));
     node_ind *infected_list = NULL;
 
     printf("------ Initial state --------\n");
-    initializeIndividuals(individuals, &infected_list, N, I, W, L);
+    initializeIndividuals(fi, individuals, &infected_list, params);
     printIndividualList(infected_list);
     printf("-------------------------------------------------------------------\n\n");
 
     // TODO: make an assumption on how much steps to do
     long simulation_time = 60 * 60 * 24 * 10;   // 10 days
-    int simulation_steps = ceil(simulation_time / t);
+    int simulation_steps = ceil(simulation_time / params.t);
     long total_simulation_time = 0;
     int simulated_days = 0;
 
-    FILE *f = fopen("output.txt", "w");
-    if (f == NULL) {
+    FILE *fo = fopen("output.txt", "w");
+    if (fo == NULL) {
         printf("Error while opening output file!\n");
         exit(FILE_ERROR);
     }
@@ -241,16 +252,15 @@ int main(int argc, char** argv) {
     clock_t begin = clock();
 
     for (int i = 0; i < simulation_steps; i++) {
-        performSimulationStep(individuals, &infected_list, N, W, L, t, d);
-        total_simulation_time += t;
+        performSimulationStep(individuals, &infected_list, params);
+        total_simulation_time += params.t;
 
         // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
         if (floor(total_simulation_time / DAY) > simulated_days) {
             simulated_days += 1;
             printf("Days simulated: %d\n", simulated_days);
-            printSimulationStatus(individuals, &infected_list, N,
-                country_matrix, x_countries, y_countries, w, l,
-                total_simulation_time, simulated_days, f);
+            printSimulationStatus(individuals, &infected_list, country_matrix, params,
+                total_simulation_time, simulated_days, fo);
         }
     }
 
@@ -258,7 +268,7 @@ int main(int argc, char** argv) {
     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
     printf("Simulation time: %g seconds\n", time_spent);
 
-    fclose(f);
+    fclose(fo);
     // TODO: should free vectors and lists?
 
     return 0;

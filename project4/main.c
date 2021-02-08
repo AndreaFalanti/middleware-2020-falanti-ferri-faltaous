@@ -3,6 +3,7 @@
 #include <time.h>
 #include <stdbool.h>
 #include <math.h>
+#include <string.h>
 #include <mpi.h>
 //#include "individual.h"
 #include "sim_params.h"
@@ -15,13 +16,14 @@
 #define IMMUNE_TIME (60 * 60 * 24 * 30 * 3)   // 3 months (7.776.000)
 #define DAY (60 * 60 * 24)                    // 86.400 seconds
 
-void initializeIndividuals(FILE *fi, individual *individuals, node_ind **infected_head, sim_params params) {
+void initializeIndividuals(FILE *fi, individual *individuals, individual *infected_arr, sim_params params) {
+    int to_infect = params.I;
     for (int i = 0; i < params.N; i++) {
-        if (params.I > 0) {
+        if (to_infect > 0) {
             individuals[i].status = infected;
-            node_ind* el = buildIndividualListNode(&individuals[i]);
-            headInsertIndividualList(infected_head, el);
-            params.I--;
+            // node_ind* el = buildIndividualListNode(&individuals[i]);
+            // headInsertIndividualList(infected_head, el);
+            to_infect--;
         }
         individuals[i].id = i;
 
@@ -31,6 +33,19 @@ void initializeIndividuals(FILE *fi, individual *individuals, node_ind **infecte
 
         printIndividualState(individuals[i]);
     }
+
+    // copy all infected individuals into infected_array, this is a fast way to perform this operation
+    memcpy(infected_arr, individuals, params.I * sizeof(individual));
+}
+
+void buildInfectedListFromArray(node_ind **infected_head, individual *infected_arr, int I) {
+    //node_ind *infected_head;
+    for (int i = 0; i < I; i++) {
+        node_ind* el = buildIndividualListNode(&infected_arr[i]);
+        headInsertIndividualList(infected_head, el);
+    }
+
+    //return infected_head;
 }
 
 bool isMovementOutOfBounds(individual *el, int W, int L) {
@@ -150,18 +165,13 @@ void performSimulationStep(individual *individuals, node_ind **infected_list, si
 // TODO: refactor inputs as global variables or a struct to avoid huge amount of parameters in declaration
 void printSimulationStatus(individual *individuals, node_ind **infected_list, country_report **cr, sim_params params,
                             long total_simulation_time, int simulated_days, FILE *out_file) {
-    fprintf(out_file, "----------- Simulation step (day: %d, total time: %ld) --------------\n",
-        simulated_days, total_simulation_time);
     // for (int i = 0; i < N; i++) {
     //     printIndividualState(individuals[i]);
     // }
 
     // print list of infected individuals
     // printIndividualList(*infected_list);
-
-    computeCountriesStatus(cr, individuals, params);
-    printCountryReports(cr, params.xc, params.yc, out_file);
-    fprintf(out_file, "-------------------------------------------------------------------\n\n");
+    printCountryReports(cr, params.xc, params.yc, out_file, simulated_days, total_simulation_time);
 }
 
 void readInputParamsFromFile(FILE *fi, sim_params *params) {
@@ -210,6 +220,21 @@ country_report** allocateCountryMatrix(sim_params *params) {
     return country_matrix;
 }
 
+// compute correct sizes for each partition (will be used in scatterv)
+void computePartitionsSizesAndOffsets(int *sizes, int *offsets, int N, int world_size) {
+    int rest = N % world_size;
+    for (int i = 0; i < world_size; i++) {
+        sizes[i] = N / world_size;
+        offsets[i] = (i == 0) ? 0 : sizes[i-1] + offsets[i-1];
+
+        if (rest > 0) {
+            sizes[i] += 1;
+            rest--;
+        }
+        //printf("\n%d %d", sizes[i], offsets[i]);
+    }
+}
+
 int main(int argc, char** argv) {
     // srand(123);
     // sim_params params;
@@ -237,7 +262,7 @@ int main(int argc, char** argv) {
 
     // free(fi);
 
-    // // TODO: make an assumption on how much steps to do
+    // TODO: make an assumption on how much steps to do
     // long simulation_time = 60 * 60 * 24 * 10;   // 10 days
     // int simulation_steps = ceil(simulation_time / params.t);
     // long total_simulation_time = 0;
@@ -259,6 +284,7 @@ int main(int argc, char** argv) {
     //     if (floor(total_simulation_time / DAY) > simulated_days) {
     //         simulated_days += 1;
     //         printf("Days simulated: %d\n", simulated_days);
+    //         computeCountriesStatus(country_matrix, individuals, params);
     //         printSimulationStatus(individuals, &infected_list, country_matrix, params,
     //             total_simulation_time, simulated_days, fo);
     //     }
@@ -279,10 +305,14 @@ int main(int argc, char** argv) {
     MPI_Init(NULL, NULL);
 
     // Commit MPI datatype versions of structs used by the program
-    MPI_Datatype MPI_SIM_PARAMS, MPI_TUPLE, MPI_INDIVIDUAL;
+    MPI_Datatype MPI_SIM_PARAMS, MPI_TUPLE, MPI_INDIVIDUAL, MPI_COUNTRY_REPORT;
+    MPI_Op MPI_COUNTRY_SUM;
+
     commitSimParamsTypeMPI(&MPI_SIM_PARAMS);
     commitTupleTypeMPI(&MPI_TUPLE);
     commitIndividualTypeMPI(&MPI_INDIVIDUAL, MPI_TUPLE);
+    commitCountryTypeMPI(&MPI_COUNTRY_REPORT);
+    MPI_Op_create(sumStructTs, 1, &MPI_COUNTRY_SUM);
 
     // Get the number of processes
     int processor_rank, world_size;
@@ -298,12 +328,20 @@ int main(int argc, char** argv) {
     printf("Processor %s online (rank %d out of %d)\n", processor_name, processor_rank, world_size);
 
     srand(123);
-    sim_params params;
-    individual *individuals;
-    individual *process_individuals;
-    node_ind *infected_list = NULL;
 
-    int *sizes = NULL;
+    individual *individuals;
+    individual *infected_arr;
+    clock_t begin, end;
+    FILE *fo = NULL;
+
+    sim_params params;
+    individual *process_individuals = NULL;
+    node_ind *infected_list = NULL;
+    country_report **country_matrix = NULL;
+    country_report **country_matrix_output = NULL;
+
+    int *p_sizes = NULL;
+    int *p_offsets = NULL;
 
     // only root reads the input file
     if (processor_rank == 0) {
@@ -317,34 +355,119 @@ int main(int argc, char** argv) {
         checkParametersConstraints(params);
 
         individuals = (individual*) malloc(params.N * sizeof(individual));
-        printf("------ Initial state --------\n");
-        initializeIndividuals(fi, individuals, &infected_list, params);
-        printIndividualList(infected_list);
-        printf("-------------------------------------------------------------------\n\n");
+        infected_arr = (individual*) malloc(params.I * sizeof(individual));
+        // TODO: check allocation is not NULL
 
-        // compute correct sizes for each partition (will be used in scatterv later)
-        sizes = (int*)malloc(world_size * sizeof(int));
-        int rest = params.N % world_size;
-        for (int i = 0; i < world_size; i++) {
-            sizes[i] = params.N / world_size;
-            if (rest > 0) {
-                sizes[i]++;
-                rest--;
-            }
-            printf("%d ", sizes[i]);
-        }
+        printf("------ Initial state --------\n");
+        initializeIndividuals(fi, individuals, infected_arr, params);
+        //printIndividualList(infected_list);
+        printf("-------------------------------------------------------------------\n\n");
 
         fclose(fi);
     }
 
     MPI_Bcast(&params, 1, MPI_SIM_PARAMS, 0, MPI_COMM_WORLD);
-    printf("\n");
-    printf("Processor %d: %d %d %d %d %f\n", processor_rank, params.N, params.I, params.w, params.l, params.d);
+    printf("\nProcessor %d: %d %d %d %d %f\n", processor_rank, params.N, params.I, params.w, params.l, params.d);
 
-    country_report **country_matrix = allocateCountryMatrix(&params);
-    process_individuals = (individual*) malloc(params.N / world_size * sizeof(individual));
+    country_matrix = allocateCountryMatrix(&params);
 
-    //MPI_Scatterv(individuals, sizes, sizes, )
+    p_sizes = (int*)malloc(world_size * sizeof(int));
+    p_offsets = (int*)malloc(world_size * sizeof(int));
+    // TODO: insert allocation check (!= NULL)
+
+    computePartitionsSizesAndOffsets(p_sizes, p_offsets, params.N, world_size);
+
+    // update N parameter, to match the partition length
+    params.N = p_sizes[processor_rank];
+    printf("Processor %d: my new N value is %d\n", processor_rank, params.N);
+    process_individuals = (individual*)malloc(params.N * sizeof(individual));
+
+    MPI_Scatterv(individuals, p_sizes, p_offsets, MPI_INDIVIDUAL,
+        process_individuals, p_sizes[processor_rank], MPI_INDIVIDUAL,
+        0, MPI_COMM_WORLD);
+
+    free(p_sizes);
+    free(p_offsets);
+    //free(individuals);
+
+    //printIndividualState(process_individuals[0]);
+
+    // pass array of infected individuals and build a list from that
+    if (processor_rank != 0) {
+        infected_arr = (individual*) malloc(params.I * sizeof(individual));
+    }
+
+    MPI_Bcast(infected_arr, params.I, MPI_INDIVIDUAL, 0, MPI_COMM_WORLD);
+    buildInfectedListFromArray(&infected_list, infected_arr, params.I);
+    // printf("Processor %d:\n", processor_rank);
+    // printIndividualList(infected_list);
+
+    free(infected_arr);
+
+    // TODO: make an assumption on how much steps to do
+    long simulation_time = 60 * 60 * 24 * 10;   // 10 days
+    int simulation_steps = ceil(simulation_time / params.t);
+    long total_simulation_time = 0;
+    int simulated_days = 0;
+
+    if (processor_rank == 0) {
+        FILE *fo = fopen("output.txt", "w");
+        if (fo == NULL) {
+            printf("Error while opening output file!\n");
+            exit(FILE_ERROR);
+        }
+        country_matrix_output = allocateCountryMatrix(&params);
+
+        begin = clock();
+    }
+
+    for (int i = 0; i < simulation_steps; i++) {
+        performSimulationStep(process_individuals, &infected_list, params);
+        total_simulation_time += params.t;
+
+        // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
+        if (floor(total_simulation_time / DAY) > simulated_days) {
+            simulated_days += 1;
+            printf("[Processor %d] Days simulated: %d\n", processor_rank, simulated_days);
+            computeCountriesStatus(country_matrix, process_individuals, params);
+
+            printCountryReports(country_matrix, params.xc, params.yc, stdout, simulated_days, total_simulation_time);
+
+            // country_report *c_arr = (country_report*)malloc(params.yc * params.xc * sizeof(country_report));
+            // for (int i = 0; i < params.yc; i++) {
+            //     for(int j = 0; j < params.xc; j++) {
+            //         c_arr[i * params.yc + j] = country_matrix[i][j];
+            //     }
+            // }
+
+            // TODO: error here, should try with an array instead of a matrix?
+            MPI_Reduce(country_matrix, country_matrix_output, params.xc * params.yc, MPI_COUNTRY_REPORT,
+                MPI_COUNTRY_SUM, 0, MPI_COMM_WORLD);
+
+            if (processor_rank == 0) {
+                printf("OK\n");
+                printCountryReports(country_matrix_output, params.xc, params.yc, fo, simulated_days, total_simulation_time);
+
+                for (int i = 0; i < params.yc; i++) {
+                    for(int j = 0; j < params.xc; j++) {
+                        country_matrix_output[i][j].immune = 0;
+                        country_matrix_output[i][j].infected = 0;
+                        country_matrix_output[i][j].susceptible = 0;
+                    }
+                }
+            }
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+    }
+
+    if (processor_rank == 0) {
+        clock_t end = clock();
+        double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+        printf("Simulation time: %g seconds\n", time_spent);
+
+        fclose(fo);
+    }
 
     // Finalize the MPI environment
     MPI_Finalize();

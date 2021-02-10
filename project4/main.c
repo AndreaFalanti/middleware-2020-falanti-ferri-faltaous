@@ -127,15 +127,17 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
     }
 }
 
-void computeCountriesStatus(country_report **cr_matrix, individual *individuals, sim_params params) {
-    for (int i = 0; i < params.yc; i++) {
-        for (int j = 0; j < params.xc; j++) {
-            // reset counters
-            cr_matrix[i][j].susceptible = 0;
-            cr_matrix[i][j].infected = 0;
-            cr_matrix[i][j].immune = 0;
-        }
+void resetCountryMatrix(country_report *cr_matrix, sim_params params) {
+    for (int i = 0; i < params.yc * params.xc; i++) {
+        // reset counters
+        cr_matrix[i].susceptible = 0;
+        cr_matrix[i].infected = 0;
+        cr_matrix[i].immune = 0;
     }
+}
+
+void computeCountriesStatus(country_report *cr_matrix, individual *individuals, sim_params params) {
+    resetCountryMatrix(cr_matrix, params);
 
     for (int i = 0; i < params.N; i++) {
         int xc = floor(individuals[i].pos.x / params.l);
@@ -143,13 +145,13 @@ void computeCountriesStatus(country_report **cr_matrix, individual *individuals,
 
         enum STATUS status = individuals[i].status;
         if (status == susceptible) {
-            cr_matrix[yc][xc].susceptible += 1;
+            cr_matrix[yc * params.yc + xc].susceptible += 1;
         }
         else if (status == infected) {
-            cr_matrix[yc][xc].infected += 1;
+            cr_matrix[yc * params.yc + xc].infected += 1;
         }
         else {
-            cr_matrix[yc][xc].immune += 1;
+            cr_matrix[yc * params.yc + xc].immune += 1;
         }
     }
 }
@@ -163,14 +165,14 @@ void performSimulationStep(individual *individuals, node_ind **infected_list, si
 }
 
 // TODO: refactor inputs as global variables or a struct to avoid huge amount of parameters in declaration
-void printSimulationStatus(individual *individuals, node_ind **infected_list, country_report **cr, sim_params params,
+void printSimulationStatus(individual *individuals, node_ind **infected_list, country_report *cr, sim_params params,
                             long total_simulation_time, int simulated_days, FILE *out_file) {
-    // for (int i = 0; i < N; i++) {
-    //     printIndividualState(individuals[i]);
-    // }
+    for (int i = 0; i < params.N; i++) {
+        printIndividualState(individuals[i]);
+    }
 
-    // print list of infected individuals
-    // printIndividualList(*infected_list);
+    //print list of infected individuals
+    printIndividualList(*infected_list);
     printCountryReports(cr, params.xc, params.yc, out_file, simulated_days, total_simulation_time);
 }
 
@@ -204,18 +206,14 @@ void checkParametersConstraints(sim_params params) {
     }
 }
 
-country_report** allocateCountryMatrix(sim_params *params) {
+country_report* allocateCountryMatrix(sim_params *params) {
     // compute the number of countries per axis 
     params->xc = ceil(params->L / (float)params->l);
     params->yc = ceil(params->W / (float)params->w);
 
     // allocate country matrix
-    country_report **country_matrix;
-    country_matrix = (country_report**)malloc(params->yc * sizeof(country_report*));
-
-    for (int i = 0; i < params->yc; i++) {
-        country_matrix[i] = (country_report*)malloc(params->xc * sizeof(country_report));
-    }
+    country_report *country_matrix;
+    country_matrix = (country_report*)malloc(params->yc * params->xc * sizeof(country_report));
 
     return country_matrix;
 }
@@ -337,8 +335,8 @@ int main(int argc, char** argv) {
     sim_params params;
     individual *process_individuals = NULL;
     node_ind *infected_list = NULL;
-    country_report **country_matrix = NULL;
-    country_report **country_matrix_output = NULL;
+    country_report *country_matrix = NULL;
+    country_report *country_matrix_output = NULL;
 
     int *p_sizes = NULL;
     int *p_offsets = NULL;
@@ -411,7 +409,7 @@ int main(int argc, char** argv) {
     int simulated_days = 0;
 
     if (processor_rank == 0) {
-        FILE *fo = fopen("output.txt", "w");
+        fo = fopen("output.txt", "w");
         if (fo == NULL) {
             printf("Error while opening output file!\n");
             exit(FILE_ERROR);
@@ -425,36 +423,24 @@ int main(int argc, char** argv) {
         performSimulationStep(process_individuals, &infected_list, params);
         total_simulation_time += params.t;
 
+        // TODO: add steps for updating infect list in each process
+
         // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
         if (floor(total_simulation_time / DAY) > simulated_days) {
             simulated_days += 1;
             printf("[Processor %d] Days simulated: %d\n", processor_rank, simulated_days);
             computeCountriesStatus(country_matrix, process_individuals, params);
 
+            // DEBUG ONLY
             printCountryReports(country_matrix, params.xc, params.yc, stdout, simulated_days, total_simulation_time);
 
-            // country_report *c_arr = (country_report*)malloc(params.yc * params.xc * sizeof(country_report));
-            // for (int i = 0; i < params.yc; i++) {
-            //     for(int j = 0; j < params.xc; j++) {
-            //         c_arr[i * params.yc + j] = country_matrix[i][j];
-            //     }
-            // }
-
-            // TODO: error here, should try with an array instead of a matrix?
             MPI_Reduce(country_matrix, country_matrix_output, params.xc * params.yc, MPI_COUNTRY_REPORT,
                 MPI_COUNTRY_SUM, 0, MPI_COMM_WORLD);
 
+            // print country reports on output file and reset the matrix for next iteration
             if (processor_rank == 0) {
-                printf("OK\n");
                 printCountryReports(country_matrix_output, params.xc, params.yc, fo, simulated_days, total_simulation_time);
-
-                for (int i = 0; i < params.yc; i++) {
-                    for(int j = 0; j < params.xc; j++) {
-                        country_matrix_output[i][j].immune = 0;
-                        country_matrix_output[i][j].infected = 0;
-                        country_matrix_output[i][j].susceptible = 0;
-                    }
-                }
+                resetCountryMatrix(country_matrix_output, params);
             }
 
             MPI_Barrier(MPI_COMM_WORLD);

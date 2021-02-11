@@ -3,16 +3,15 @@
 #include "country_report.h"
 
 void printCountryReports(country_report *cr, int X, int Y, FILE *out_file, long total_simulation_time, int simulated_days) {
-    fprintf(out_file, "----------- Simulation step (day: %d, total time: %ld) --------------\n",
+    fprintf(out_file, "------------- Simulation step (day: %d, total time: %ld) --------------\n",
         simulated_days, total_simulation_time);
 
-    fprintf(out_file, "\nCountry Report:\n");
     for (int i = 0; i < X * Y; i++) {
         fprintf(out_file, "Country [%d, %d] -> susceptible: %ld, infected: %ld, immune: %ld. TOTAL: %ld\n",
                 i / X, i % X, cr[i].susceptible, cr[i].infected, cr[i].immune, (cr[i].susceptible + cr[i].infected + cr[i].immune));
     }
 
-    fprintf(out_file, "-------------------------------------------------------------------\n\n");
+    fprintf(out_file, "-------------------------------------------------------------------------\n\n");
 }
 
 void commitCountryTypeMPI(MPI_Datatype *mpi_type) {

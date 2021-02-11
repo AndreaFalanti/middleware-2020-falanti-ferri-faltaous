@@ -4,7 +4,7 @@
 #include "individual_list.h"
 #include "error_codes.h"
 
-node_ind* buildIndividualListNode(individual* ind) {
+node_ind* buildIndividualListNode(individual ind) {
     node_ind *el;
     el = (node_ind*)malloc(sizeof(node_ind));
 
@@ -21,7 +21,7 @@ node_ind* buildIndividualListNode(individual* ind) {
 
 void headInsertIndividualList(node_ind **l, node_ind *el) {
     if (*l != NULL) {
-        el -> next = *l;
+        el->next = *l;
         *l = el;
     }
     else {
@@ -38,10 +38,10 @@ void tailInsertIndividualList(node_ind **l, node_ind *el) {
         headInsertIndividualList(l, el);
     }
     else {
-        while (temp -> next != NULL) {
-            temp = temp -> next;
+        while (temp->next != NULL) {
+            temp = temp->next;
         }
-        temp -> next = el;
+        temp->next = el;
     }
 }
 
@@ -54,23 +54,25 @@ void removeNodeWithId(node_ind **head, int search_id) {
     bool deleted = false;
 
     while (!deleted && temp != NULL) {
-        if (temp->ind->id == search_id) {
+        if (temp->ind.id == search_id) {
             // remove first list element, modifying the head
             if (prev == NULL) {
                 *head = temp->next;
             }
-            // remove element from list and memory
+            // remove element from list
             else {
                 prev->next = temp->next;
-                free(temp);
             }
 
+            // free the memory of deleted element
+            free(temp);
             deleted = true;
         }
         prev = temp;
         temp = temp->next;
     }
 
+    // something is wrong if this case happens
     if (!deleted) {
         printf("ID: %d not found!", search_id);
     }
@@ -81,7 +83,7 @@ void printIndividualList(node_ind *head) {
 
     printf("\nInfected List:\n");
     while (current != NULL) {
-        printIndividualState(*(current->ind));
+        printIndividualState(current->ind);
         current = current->next;
     }
 }

@@ -30,8 +30,6 @@ void initializeIndividuals(FILE *fi, individual *individuals, individual *infect
         // read pos and vel from file
         fscanf(fi, "%f %f %f %f", &individuals[i].pos.x, &individuals[i].pos.y, &individuals[i].vel.x, &individuals[i].vel.y);
         fgetc(fi);
-
-        printIndividualState(individuals[i]);
     }
 
     // copy all infected individuals into infected_array, this is a fast way to perform this operation
@@ -41,7 +39,7 @@ void initializeIndividuals(FILE *fi, individual *individuals, individual *infect
 void buildInfectedListFromArray(node_ind **infected_head, individual *infected_arr, int I) {
     //node_ind *infected_head;
     for (int i = 0; i < I; i++) {
-        node_ind* el = buildIndividualListNode(&infected_arr[i]);
+        node_ind* el = buildIndividualListNode(infected_arr[i]);
         headInsertIndividualList(infected_head, el);
     }
 
@@ -65,32 +63,35 @@ void updateIndividualPosition(individual *el) {
     el->pos.y += el->vel.y;
 }
 
-// move all individuals, based on their actual speed
-void moveIndividuals(individual *individuals, int N, int W, int L) {
-    for (int i = 0; i < N; i++) {
-        if (isMovementOutOfBounds(&individuals[i], W, L)) {
-            // TODO: could still be out of bound by inverting, find a better method
-            invertIndividualVelocity(&individuals[i]);
-        }
-        updateIndividualPosition(&individuals[i]);
+// move an individual, based on their actual speed
+void moveIndividual(individual *el, int W, int L) {
+    if (isMovementOutOfBounds(el, W, L)) {
+        // TODO: could still be out of bound by inverting, find a better method
+        invertIndividualVelocity(el);
+    }
+
+    updateIndividualPosition(el);
+}
+
+void updateInfectedIndividualStatus(individual *el, node_ind **infected_list, int t) {
+    el->status_cumulated_time += t;
+    if (el->status_cumulated_time >= INFECTION_TIME) {
+        // extra time is converted into time of immunity
+        el->status_cumulated_time = el->status_cumulated_time % INFECTION_TIME;
+        el->status = immune;
+
+        removeNodeWithId(infected_list, el->id);
     }
 }
 
 // update status timer of individual, potentially triggering a status change when conditions are met
-void updateIndividualStatus(individual *el, node_ind **infected_list, int t, float d) {
+bool updateIndividualStatus(individual *el, node_ind **infected_list, int t, float d) {
     bool exposure = false;
     node_ind *head_temp = *infected_list;
     int exposure_time = t;
 
     if (el->status == infected) {
-        el->status_cumulated_time += t;
-        if (el->status_cumulated_time >= INFECTION_TIME) {
-            // extra time is converted into time of immunity
-            el->status_cumulated_time = el->status_cumulated_time % INFECTION_TIME;
-            el->status = immune;
-
-            removeNodeWithId(infected_list, el->id);
-        }
+        updateInfectedIndividualStatus(el, infected_list, t);
     }
     else if (el->status == immune) {
         el->status_cumulated_time += t;
@@ -105,15 +106,17 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
     // both cases in which was already susceptible or it become susceptible from immune status in this simulation step 
     if (el->status == susceptible) {
         while (head_temp != NULL && !exposure) {
-            if (computeDistance(el->pos, head_temp->ind->pos) <= d) {
+            if (computeDistance(el->pos, head_temp->ind.pos) <= d) {
                 exposure = true;
                 el->status_cumulated_time += exposure_time;
                 if (el->status_cumulated_time >= INFECTION_THRESHOLD) {
                     el->status_cumulated_time = el->status_cumulated_time % INFECTION_THRESHOLD;
                     el->status = infected;
 
-                    node_ind *new_el = buildIndividualListNode(el);
-                    headInsertIndividualList(infected_list, new_el);
+                    return true;
+
+                    // node_ind *new_el = buildIndividualListNode(el);
+                    // headInsertIndividualList(infected_list, new_el);
                 }
             }
 
@@ -125,6 +128,8 @@ void updateIndividualStatus(individual *el, node_ind **infected_list, int t, flo
             el->status_cumulated_time = 0;
         }   
     }
+
+    return false;
 }
 
 void resetCountryMatrix(country_report *cr_matrix, sim_params params) {
@@ -157,11 +162,35 @@ void computeCountriesStatus(country_report *cr_matrix, individual *individuals, 
 }
 
 // compute status updates for each individual, move them and print various debug information
-void performSimulationStep(individual *individuals, node_ind **infected_list, sim_params params) {
+int performSimulationStep(individual *individuals, node_ind **infected_list, sim_params params, individual *newInfected) {
+    int infections = 0;
     for (int i = 0; i < params.N; i++) {
-        updateIndividualStatus(&individuals[i], infected_list, params.t, params.d);
+        bool infected = updateIndividualStatus(&individuals[i], infected_list, params.t, params.d);
+        if (infected) {
+            newInfected[infections] = individuals[i];
+            infections++;
+        }
     }
-    moveIndividuals(individuals, params.N, params.W, params.L); 
+
+    // move individuals vector
+    for (int i = 0; i < params.N; i++) {
+        moveIndividual(&individuals[i], params.W, params.L);
+    }
+
+    // move and update infected individuals
+    node_ind *temp = *infected_list;
+    node_ind *el;
+    while (temp != NULL) {
+        // el used because updateInfectedIndividualStatus could delete the node
+        el = temp;
+        temp = temp->next;
+
+        moveIndividual(&(el->ind), params.W, params.L);
+        // el could be deleted if immune after the update, but it's no more accessed so it should work fine
+        updateInfectedIndividualStatus(&(el->ind), infected_list, params.t);
+    }
+
+    return infections;
 }
 
 // TODO: refactor inputs as global variables or a struct to avoid huge amount of parameters in declaration
@@ -229,6 +258,7 @@ void computePartitionsSizesAndOffsets(int *sizes, int *offsets, int N, int world
             sizes[i] += 1;
             rest--;
         }
+        // DEBUG ONLY
         //printf("\n%d %d", sizes[i], offsets[i]);
     }
 }
@@ -328,7 +358,6 @@ int main(int argc, char** argv) {
     srand(123);
 
     individual *individuals;
-    individual *infected_arr;
     clock_t begin, end;
     FILE *fo = NULL;
 
@@ -337,6 +366,9 @@ int main(int argc, char** argv) {
     node_ind *infected_list = NULL;
     country_report *country_matrix = NULL;
     country_report *country_matrix_output = NULL;
+
+    individual *infected_arr = NULL;
+    individual *received_infected_arr = NULL;
 
     int *p_sizes = NULL;
     int *p_offsets = NULL;
@@ -356,18 +388,25 @@ int main(int argc, char** argv) {
         infected_arr = (individual*) malloc(params.I * sizeof(individual));
         // TODO: check allocation is not NULL
 
-        printf("------ Initial state --------\n");
         initializeIndividuals(fi, individuals, infected_arr, params);
+
+        // DEBUG ONLY
+        //printf("------ Initial state --------\n");
+        // for (int i = 0; i < params.N; i++) {
+        //     printIndividualState(individuals[i]);
+        // }
         //printIndividualList(infected_list);
-        printf("-------------------------------------------------------------------\n\n");
+        //printf("-------------------------------------------------------------------\n\n");
 
         fclose(fi);
     }
 
     MPI_Bcast(&params, 1, MPI_SIM_PARAMS, 0, MPI_COMM_WORLD);
-    printf("\nProcessor %d: %d %d %d %d %f\n", processor_rank, params.N, params.I, params.w, params.l, params.d);
+    // DEBUG ONLY
+    //printf("\nProcessor %d: %d %d %d %d %f\n", processor_rank, params.N, params.I, params.w, params.l, params.d);
 
     country_matrix = allocateCountryMatrix(&params);
+    received_infected_arr = (individual*)malloc(params.N * sizeof(individual));
 
     p_sizes = (int*)malloc(world_size * sizeof(int));
     p_offsets = (int*)malloc(world_size * sizeof(int));
@@ -397,16 +436,29 @@ int main(int argc, char** argv) {
 
     MPI_Bcast(infected_arr, params.I, MPI_INDIVIDUAL, 0, MPI_COMM_WORLD);
     buildInfectedListFromArray(&infected_list, infected_arr, params.I);
-    // printf("Processor %d:\n", processor_rank);
-    // printIndividualList(infected_list);
+
+    // DEBUG ONLY
+    // if (processor_rank == 1) {
+    //     printf("Processor %d:\n", processor_rank);
+    //     printIndividualList(infected_list);
+    // }
+    
 
     free(infected_arr);
 
+    // array for storing new infected individuals during a step.
+    // by setting it to dim = process_N, we make sure it is big enough even if all individuals are infected at the same step
+    infected_arr = (individual*) malloc(params.N * sizeof(individual));
+
+
     // TODO: make an assumption on how much steps to do
-    long simulation_time = 60 * 60 * 24 * 10;   // 10 days
+    long simulation_time = 60 * 60 * 24 * 30;   // 10 days
     int simulation_steps = ceil(simulation_time / params.t);
     long total_simulation_time = 0;
     int simulated_days = 0;
+    int infections, total_infections;   // total infections used only in root
+    int *infection_counters = NULL;     // relevant only for root
+    int *infection_offsets = NULL;      // relevant only for root
 
     if (processor_rank == 0) {
         fo = fopen("output.txt", "w");
@@ -414,25 +466,84 @@ int main(int argc, char** argv) {
             printf("Error while opening output file!\n");
             exit(FILE_ERROR);
         }
+
         country_matrix_output = allocateCountryMatrix(&params);
+        infection_counters = (int*)malloc(world_size * sizeof(int));
+        infection_offsets = (int*)malloc(world_size * sizeof(int));
 
         begin = clock();
     }
 
     for (int i = 0; i < simulation_steps; i++) {
-        performSimulationStep(process_individuals, &infected_list, params);
+        infections = performSimulationStep(process_individuals, &infected_list, params, infected_arr);
         total_simulation_time += params.t;
 
-        // TODO: add steps for updating infect list in each process
+        // DEBUG ONLY
+        // if (processor_rank == 1) {
+        //     printf("Processor 1: pre-list\n");
+        //     printIndividualList(infected_list);
+        // }
 
-        // TODO: it should print only at the end of the day in the final app, but depending on t this condition will not hold, fix later
+        //printf("Processor %d: infections are %d\n", processor_rank, infections);
+
+        //TODO: add steps for updating infect list in each process
+        MPI_Gather(&infections, 1, MPI_INT,
+            infection_counters, 1, MPI_INT,
+            0, MPI_COMM_WORLD);
+
+        if (processor_rank == 0) {
+            total_infections = 0;
+            for (int i = 0; i < world_size; i++) {
+                //printf("%d: %d\n", i, infection_counters[i]);
+                total_infections += infection_counters[i];
+                infection_offsets[i] = (i == 0) ? 0 : infection_counters[i-1] + infection_offsets[i-1];
+            }
+        }
+
+        // broadcast total infection number of this simulation step
+        MPI_Bcast(&total_infections, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        // if there are new infections, propagate the new infected individuals to all the processes
+        if (total_infections > 0) {
+            MPI_Gatherv(infected_arr, infections, MPI_INDIVIDUAL,
+                received_infected_arr, infection_counters, infection_offsets, MPI_INDIVIDUAL,
+                0, MPI_COMM_WORLD);
+
+            MPI_Bcast(received_infected_arr, total_infections, MPI_INDIVIDUAL, 0, MPI_COMM_WORLD);
+
+            // DEBUG ONLY
+            // if (processor_rank == 1) {
+            //     printf("Processor 1: pre-list\n");
+            //     printIndividualList(infected_list);
+            // }
+
+            for (int i = 0; i < total_infections; i++) {
+                node_ind *el = buildIndividualListNode(received_infected_arr[i]);
+                headInsertIndividualList(&infected_list, el);
+
+                // DEBUG ONLY
+                // if (processor_rank == 1) {
+                //     printf("el %d:\n", i);
+                //     printIndividualState(el->ind);
+                // }
+            }
+
+            // if (processor_rank == 0) {
+            //     printf("Processor 0: new infections at step of time %ld are %d\n", total_simulation_time, total_infections);
+            // }
+
+            //DEBUG ONLY
+            // if (processor_rank == 1) {
+            //     printIndividualList(infected_list);
+            // }
+        }
+
         if (floor(total_simulation_time / DAY) > simulated_days) {
             simulated_days += 1;
             printf("[Processor %d] Days simulated: %d\n", processor_rank, simulated_days);
             computeCountriesStatus(country_matrix, process_individuals, params);
 
             // DEBUG ONLY
-            printCountryReports(country_matrix, params.xc, params.yc, stdout, simulated_days, total_simulation_time);
+            //printCountryReports(country_matrix, params.xc, params.yc, stdout, simulated_days, total_simulation_time);
 
             MPI_Reduce(country_matrix, country_matrix_output, params.xc * params.yc, MPI_COUNTRY_REPORT,
                 MPI_COUNTRY_SUM, 0, MPI_COMM_WORLD);

@@ -11,8 +11,9 @@ float float_rand(float min, float max) {
     return min + scale * ( max - min );      /* [min, max] */
 }
 
+// ./a.out 2500 75 250 250 50 50 2.1 100 7.0
 int main(int argc, char** argv) {
-    if (argc != 9) {
+    if (argc != 10) {
         printf("Invalid arguments");
         exit(-1);
     }
@@ -26,7 +27,8 @@ int main(int argc, char** argv) {
     int w = strtol(argv[5], NULL, 10);
     int l = strtol(argv[6], NULL, 10);
     float d = strtod(argv[7], NULL);
-    int t = strtol(argv[8], NULL, 10); 
+    int t = strtol(argv[8], NULL, 10);
+    float vel_max = strtod(argv[9], NULL);
 
     
     FILE *f = fopen("input.txt", "w");
@@ -41,11 +43,11 @@ int main(int argc, char** argv) {
     fprintf(f, "%f %d\n\n", d, t);
 
     for (int i = 0; i < N; i++) {
-        float pos_x = float_rand(0 + L / 100.0, L - L / 100.0);
-        float pos_y = float_rand(0 + W / 100.0, W - W / 100.0);
+        float pos_x = float_rand(0 + vel_max, L - vel_max);
+        float pos_y = float_rand(0 + vel_max, W - vel_max);
 
-        float vel_x = float_rand(-L / 100.0, L / 100.0);
-        float vel_y = float_rand(-W / 100.0, W / 100.0);
+        float vel_x = float_rand(-vel_max, vel_max);
+        float vel_y = float_rand(-vel_max, vel_max);
 
         fprintf(f, "%f %f %f %f\n", pos_x, pos_y, vel_x, vel_y);
     }

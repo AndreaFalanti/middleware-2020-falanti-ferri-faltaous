@@ -13,6 +13,7 @@ import static org.apache.spark.sql.functions.*;
 
 
 public class Main {
+    // HELPER FUNCTIONS USED IN PREPROCESSING
     /**
      * Distribute weekly cases among days as integer values, putting the rest on farther days
      * @param day 0-indexed value
@@ -43,12 +44,13 @@ public class Main {
                 .getOrCreate();
 
         // READ INPUT + PREPROCESSING
-        // create the dataframe, directly infer the structure from the csv headers
-        // headers: dateRep, year_week, cases_weekly, deaths_weekly, countriesAndTerritories, geoId,
+        // Create the dataframe, directly infer the structure from the csv headers.
+        // CSV HEADERS: dateRep, year_week, cases_weekly, deaths_weekly, countriesAndTerritories, geoId,
         // countryterritoryCode, popData2019, continentExp, notification_rate_per_100000_population_14-days
-        // Also cast the date to correct type, so that we can order the rows later. Take only the columns required for
-        // the project operations.
-        // Divide each rows in 7 rows -> from weeks to days
+        // Preprocessing:
+        // - cast the date to correct type, so that we can order the rows later.
+        // - Generate from each row a total of 7 rows -> from weeks to days
+        // - Take only the columns required for the project operations.
         final Dataset<Row> coronaRecords = spark
                 .read()
                 .option("header", "true")
@@ -78,20 +80,21 @@ public class Main {
                 .orderBy("date");
 
         // DEBUG: test that the dataset works fine and the structure is correct
-        coronaRecords.filter(col("countriesAndTerritories").equalTo("Albania")).show();
-        coronaRecords.printSchema();
+        //coronaRecords.filter(col("countriesAndTerritories").equalTo("Albania")).show();
+        //coronaRecords.printSchema();
 
 
-        // 1st OPERATION: compute the moving average
+        // 1st OPERATION: compute the moving average of daily cases
         WindowSpec windowSpec = Window.partitionBy("countriesAndTerritories").orderBy(col("date"));
 
         final Dataset<Row> movAvg = coronaRecords.withColumn("movingAverage", avg(col("cases"))
                 .over(windowSpec.rowsBetween(-6, 0)));
 
-        movAvg.show(100, false);
+        //movAvg.show(100, false);
+        movAvg.select("date", "countriesAndTerritories", "movingAverage").show(100, false);
 
 
-        // 2nd OPERATION: compute percentage variation between the average of the day and the one of the previous day
+        // 2nd OPERATION: compute variation percentage between the average of the day and the one of the previous day
         final Dataset<Row> percentageIncrease = movAvg
             .withColumn("variation",
                 when((lag("movingAverage", 1).over(windowSpec)).isNull(), 0)
@@ -104,7 +107,9 @@ public class Main {
                                                 .otherwise(lag("movingAverage", 1).over(windowSpec)))
                                         .$times(100)));
 
-        percentageIncrease.show(100, false);
+        //percentageIncrease.show(100, false);
+        percentageIncrease.select("date", "countriesAndTerritories", "variationPercentage")
+                .show(100, false);
 
 
         //3rd OPERATION: top 10 countries with the greatest percentage increase per day
@@ -115,8 +120,10 @@ public class Main {
                 .filter(col("top").$less$eq(10))
                 .orderBy("date", "top");
 
-        top10CountriesPerDay.show(100, false);
+        //top10CountriesPerDay.show(100, false);
         //top10CountriesPerDay.where(col("date").$greater(new Date(120, 1, 1))).show(100, false);
+        top10CountriesPerDay.select("date", "countriesAndTerritories", "variationPercentage", "top")
+                .show(100, false);
 
         spark.close();
     }

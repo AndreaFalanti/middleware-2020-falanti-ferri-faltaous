@@ -1,0 +1,91 @@
+\documentclass[10pt]{article}
+
+\usepackage[utf8]{inputenc}
+
+\usepackage{amsmath,amssymb}
+
+\usepackage{esvect}
+
+\usepackage{listings}
+
+\usepackage{color}
+
+\usepackage{graphicx}
+
+\usepackage{float}
+
+\usepackage{blindtext}
+
+\usepackage{tabularx}
+
+\PassOptionsToPackage{hyphens}{url}\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=blue,
+	filecolor=magenta,      
+	urlcolor=cyan,
+}
+
+
+\title{Middleware technologies for distributed systems\\Project 5}
+
+\date{2020-2021}
+
+
+
+\begin{document}
+	\begin{titlepage}
+		\begin{figure}[t]
+			\centering\includegraphics[width=0.7\textwidth]{../../docResources/logo_polimi}
+		\end{figure}
+		\maketitle
+		
+		\large
+		\begin{tabularx}{\linewidth}{@{}lXl@{}}
+			\textit{Authors:}  & & \textit{Professors:} \\
+			Andrea Falanti      & & Prof.\@ Alessandro Margara\\
+			Federico Ferri  & & Prof. Luca Mottola \\
+			Abanoub Faltaous & & \\
+		\end{tabularx}		
+		\thispagestyle{empty}
+	\end{titlepage}
+	
+	\tableofcontents
+	\newpage
+	
+	\section{Introduction}
+	The project requires to implement a system to study the evolution of the COVID-19 cases worldwide. In particular, it is required to compute:
+	\begin{itemize}
+		\item Seven days moving average of new reported cases, for each county and for each day
+		\item Percentage increase (with respect to the day before) of the seven days moving average, for each country and for each day
+		\item Top 10 countries with the highest percentage increase of the seven days moving average, for each day
+	\end{itemize}
+
+	The dataset used is the csv format provided in this link:\\
+	\url{https://www.ecdc.europa.eu/en/publications-data/download-todays-data-geographic-distribution-covid-19-cases-worldwide}.
+	
+	The records contained in the csv are organized in weeks and contains multiple fields, some of them are not useful for the scope of the problem.
+	
+	\section{Implementation}
+	To implement this project we decided to use Apache Spark, because it's indicated to operate on big amount of data in a reliable and fast way. Apache Spark is imported into a Java project, by defining the imports in the Maven file.
+	
+	All operation are implemented by using the Spark SQL module. The first step is generating a dataframe from the records read from the csv data file. A preprocessing step is also required to separate the records (organized in the csv as weeks) into days, generating therefore 7 rows from each one of the csv. Performing this operation is a bit tricky in Spark, because dataframes are meant to be immutable, therefore the solution we used is to add columns for date and cases and then explode the row into multiple rows with the 'explode' Spark function. After reading and preprocessing the data, we select only the columns that are required for our purposes, that are:
+	\begin{itemize}
+		\item date
+		\item daily\_cases
+		\item countriesAndTerritories
+	\end{itemize}
+	
+	To compute the required indexes, we need to perform some operations that require to iterate on multiple rows of the dataframe. A nice way to perform this kind of operations is to use the Window class.
+	
+	To perform the first operation and second operation we created a WindowSpec partitioned by \textit{countriesAndTerritories} field and ordered by \textit{date}. To compute the moving average for each day, it's necessary to consider the \textit{daily cases} of the row itself and the ones of previous six rows, then average them. If there are not six records before the considered row, the average is performed anyway but only on the present rows
+	To compute the variation percentage, we firstly compute the variation in the \textit{moving average} between the considered row and the previous one, then compute the percentage with the formula:\\\\
+	$ variationPercentage_{t} = \dfrac{variation_{t}}{mov\_average_{t-1}} * 100$\\\\
+	To take the previous row, we just use the "lag" function on the window, with lag parameter = 1. In case there is no previous row, the variation is set to 0. Instead, if the moving average at the previous step is 0, the variation is divided with Double.MIN\_VALUE, making the variation percentage to infinity. We considered to make it to NaN instead of infinity in the case explicated before, but it would not be detected in the top 10 countries computed in the next operation if using NaN, but it could be an important event of interest like the start of an infection in a country.
+	
+	For the last operation, we create a WindowSpec partitioned by date and ordered by the variation percentage computed before, ordered in a descent manner. We can then select the first 10 rows of each partition of the window (Spark allows to get the row index of a partition by using the 'row\_number' method) and so complete the request of finding the top 10 countries with highest percentage increase per day.
+	
+	\section{Performance analysis}
+	TODO
+	
+\end{document}

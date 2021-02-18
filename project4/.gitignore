@@ -1,0 +1,5 @@
+proj4
+.vscode/
+*.txt
+input_generator/*.txt
+input_generator/*.out

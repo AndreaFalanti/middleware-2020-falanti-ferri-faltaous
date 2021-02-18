@@ -504,8 +504,6 @@ int main(int argc, char** argv) {
                 printCountryReports(country_matrix_output, params.xc, params.yc, fo, total_simulation_time, simulated_days);
                 resetCountryMatrix(country_matrix_output, params);
             }
-
-            MPI_Barrier(MPI_COMM_WORLD);
         }
     }
 

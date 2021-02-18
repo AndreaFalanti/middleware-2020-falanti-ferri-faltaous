@@ -135,6 +135,27 @@
 
 	
 	\section{Performance analysis}
-	TODO
+	The simulation developed has a complexity of $ O(N^2 * sim\_steps) $, given by the interaction check between susceptible individuals and infected ones. Both susceptible and infected counts are always $ \le N $ and the worst cases are when the two counts are actually balanced. Each susceptible individual must check if an infected one is nearby, but if one is found the others are not checked, speeding up the status update.
+	
+	Using a simulation with these parameters:
+	\begin{itemize}
+		\item N = 2500
+		\item I = 75
+		\item 250x250 simulation area, with countries of 50x50
+		\item d = 2.03
+		\item t = 100
+	\end{itemize}
+	We performed some tests on the speed of the simulator, simulating 150 days with the same input file, that balance well the infections across the first 40 days, causing major slow downs before proceeding very fast in the remaining days.
+	
+	The results we obtained are the following:
+	\begin{itemize}
+		\item 6 processes: 216.117 seconds
+		\item 4 processes: 330.496 seconds
+		\item 2 processes: 323.427 seconds
+		\item 1 process: 237.555 seconds
+	\end{itemize}
+
+	Unfortunately, the time of simulations varied a lot even with executions using the same amount of processes. A possible reason of this behavior is the fact that the simulation has been run on a Linux subsystem for Windows, so the fact that it was not the native environment of the machine could have compromised the results.
+	Theoretically speaking, we expected to have better results on average by parallelizing across multiple processes, because this allows to check less susceptible individuals per process and so to have a smaller complexity in the 'individual status update' function, which is the bottleneck of the simulator. Of course, communication and coordination costs due to the MPI functions must be heavily considered, because they are done at each simulation step. The slower process limits all the others and the frequent coordination hinders a bit the benefits of running multiple processes, but from the variability of our results is difficult to understand how much the performances actually scale with the number of processes.
 	
 \end{document}

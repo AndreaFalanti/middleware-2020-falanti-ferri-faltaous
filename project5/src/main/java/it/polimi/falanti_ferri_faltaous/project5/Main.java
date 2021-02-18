@@ -1,10 +1,7 @@
 package it.polimi.falanti_ferri_faltaous.project5;
 
 import it.polimi.falanti_ferri_faltaous.project5.utils.LogUtils;
-import org.apache.spark.sql.Column;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.WindowSpec;
 import org.apache.spark.sql.types.DataTypes;
@@ -36,6 +33,9 @@ public class Main {
         LogUtils.setLogLevel();
 
         final String master = args.length > 0 ? args[0] : "local[4]";
+        final String filePath = args.length > 1 ? args[1] : "data/data.csv";
+        final boolean logOnConsole = args.length > 2 ? args[2].equals("true") : false;
+        final String savePath = args.length > 3 ? args[3] : "./";
 
         final SparkSession spark = SparkSession
                 .builder()
@@ -55,7 +55,7 @@ public class Main {
                 .read()
                 .option("header", "true")
                 .option("delimiter", ",")
-                .csv("data/data.csv")
+                .csv(filePath)
                 .withColumn("date", to_date(col("dateRep"), "dd/MM/yyyy"))
                 .withColumn("cases_day1", computeDayCases(0))
                 .withColumn("date_day1", computeDate(0))
@@ -83,16 +83,24 @@ public class Main {
         //coronaRecords.filter(col("countriesAndTerritories").equalTo("Albania")).show();
         //coronaRecords.printSchema();
 
+        System.out.println("File read correctly");
 
         // 1st OPERATION: compute the moving average of daily cases
         WindowSpec windowSpec = Window.partitionBy("countriesAndTerritories").orderBy(col("date"));
 
         final Dataset<Row> movAvg = coronaRecords.withColumn("movingAverage", avg(col("cases"))
-                .over(windowSpec.rowsBetween(-6, 0)));
+                .over(windowSpec.rowsBetween(-6, 0))).cache();
 
-        //movAvg.show(100, false);
-        movAvg.select("date", "countriesAndTerritories", "movingAverage").show(100, false);
-
+        if (logOnConsole) {
+            //movAvg.show(100, false);
+            movAvg.select("date", "countriesAndTerritories", "movingAverage").show(100, false);
+        }
+        else {
+            movAvg.select("date", "countriesAndTerritories", "movingAverage")
+                    .write().mode(SaveMode.Overwrite)
+                    .format("com.databricks.spark.csv")
+                    .option("delimiter", ",").format("csv").save(savePath + "/op1.csv");
+        }
 
         // 2nd OPERATION: compute variation percentage between the average of the day and the one of the previous day
         final Dataset<Row> percentageIncrease = movAvg
@@ -105,11 +113,21 @@ public class Main {
                                 .otherwise(col("variation")
                                         .$div(when((lag("movingAverage", 1).over(windowSpec)).equalTo(0), Double.MIN_VALUE)
                                                 .otherwise(lag("movingAverage", 1).over(windowSpec)))
-                                        .$times(100)));
+                                        .$times(100))).cache();
 
-        //percentageIncrease.show(100, false);
-        percentageIncrease.select("date", "countriesAndTerritories", "variationPercentage")
-                .show(100, false);
+        if (logOnConsole) {
+            //percentageIncrease.show(100, false);
+            percentageIncrease.select("date", "countriesAndTerritories", "variationPercentage")
+                    .show(100, false);
+        }
+        else {
+            percentageIncrease.select("date", "countriesAndTerritories", "variationPercentage")
+                    .write().mode(SaveMode.Overwrite)
+                    .format("com.databricks.spark.csv")
+                    .option("delimiter", ",").format("csv").save(savePath + "/op2.csv");
+        }
+
+        movAvg.unpersist();
 
 
         //3rd OPERATION: top 10 countries with the greatest percentage increase per day
@@ -120,10 +138,20 @@ public class Main {
                 .filter(col("top").$less$eq(10))
                 .orderBy("date", "top");
 
-        //top10CountriesPerDay.show(100, false);
-        //top10CountriesPerDay.where(col("date").$greater(new Date(120, 1, 1))).show(100, false);
-        top10CountriesPerDay.select("date", "countriesAndTerritories", "variationPercentage", "top")
-                .show(100, false);
+        if (logOnConsole) {
+            //top10CountriesPerDay.show(100, false);
+            //top10CountriesPerDay.where(col("date").$greater(new Date(120, 1, 1))).show(100, false);
+            top10CountriesPerDay.select("date", "countriesAndTerritories", "variationPercentage", "top")
+                    .show(100, false);
+        }
+        else {
+            top10CountriesPerDay.select("date", "countriesAndTerritories", "variationPercentage", "top")
+                    .write().mode(SaveMode.Overwrite)
+                    .format("com.databricks.spark.csv")
+                    .option("delimiter", ",").save(savePath + "/op3.csv");
+        }
+        
+        percentageIncrease.unpersist();
 
         spark.close();
     }

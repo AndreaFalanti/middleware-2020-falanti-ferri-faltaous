@@ -64,12 +64,20 @@
 	The dataset used is the csv format provided in this link:\\
 	\url{https://www.ecdc.europa.eu/en/publications-data/download-todays-data-geographic-distribution-covid-19-cases-worldwide}.
 	
-	The records contained in the csv are organized in weeks and contains multiple fields, some of them are not useful for the scope of the problem.
+	The records contained in the csv are organized in weeks and contains multiple fields, which some of them are not relevant for the scope of the problem.
 	
 	\section{Implementation}
-	To implement this project we decided to use Apache Spark, because it's indicated to operate on big amount of data in a reliable and fast way. Apache Spark is imported into a Java project, by defining the imports in the Maven file.
+	To implement this project we decided to use Apache Spark, because it's indicated to operate on big amount of data in a reliable and fast way. Spark provides functionalities to schedule automatically custom stages of operations, in a similar way to map/reduce systems, so that the developer must only define the operations to perform, while the parallelization and fault tolerance aspects are handled by the Spark engine. Apache Spark is imported into a Java project, by defining the imports in the Maven file.
 	
-	All operation are implemented by using the Spark SQL module. The first step is generating a dataframe from the records read from the csv data file. A preprocessing step is also required to separate the records (organized in the csv as weeks) into days, generating therefore 7 rows from each one of the csv. Performing this operation is a bit tricky in Spark, because dataframes are meant to be immutable, therefore the solution we used is to add columns for date and cases and then explode the row into multiple rows with the 'explode' Spark function. After reading and preprocessing the data, we select only the columns that are required for our purposes, that are:
+	The program accepts four arguments from command line:
+	\begin{itemize}
+		\item address of the Spark master instance
+		\item path of the dataset
+		\item boolean flag ("true" or "false") to indicate if output should be print on console or file (csv)
+		\item save path, relevant only if output is saved on file
+	\end{itemize}
+	
+	All operation are implemented by using the Spark SQL module, that allows to optimize the operations using techniques similar to the ones used in DBMS. The first step is generating a dataframe from the records read from the csv data file. A preprocessing step is also required to separate the records (organized in the csv as weeks) into days, generating therefore 7 rows from each one of the csv. Performing this operation is a bit tricky in Spark, because dataframes are meant to be immutable, therefore the solution we used is to add columns for date and cases and then explode the row into multiple rows with the 'explode' Spark function. After reading and preprocessing the data, we select only the columns that are required for our purposes, that are:
 	\begin{itemize}
 		\item date
 		\item daily\_cases
@@ -86,6 +94,16 @@
 	For the last operation, we create a WindowSpec partitioned by date and ordered by the variation percentage computed before, ordered in a descent manner. We can then select the first 10 rows of each partition of the window (Spark allows to get the row index of a partition by using the 'row\_number' method) and so complete the request of finding the top 10 countries with highest percentage increase per day.
 	
 	\section{Performance analysis}
-	TODO
+    We tested the application in a distributed cluster composed by two different computers, one running the master and a worker, the other running only a worker, obviously connected to the master. During the tests, the dataset csv file has been placed in a shared directory, so that was accessible by both workers.
+    
+    To improve performances, the dataframe computed in the first operation is cached, so that computations are not repeated when the second operation is performed, the same is done for the second dataframe for the third operation. When caches are not needed, they are freed to regain memory.
+    
+    Time results:
+    \begin{itemize}
+    	\item single worker: 22s
+    	\item two workers (different devices): 25s
+    \end{itemize}
+
+	From these results it seems that the overhead of the communication and coordination of the workers are more time consuming than the performance gains given by the parallelization. This behavior could be caused by the fact that the actual dataset is pretty small and also that we have only two workers, which is an unusual case for a distributed cluster of workers. With a larger amount of data and more workers in the cluster, we expect to have great benefit from the parallelization of the stages performed by Spark.
 	
 \end{document}

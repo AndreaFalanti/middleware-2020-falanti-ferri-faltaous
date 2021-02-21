@@ -21,25 +21,19 @@ public class DeviceActor extends AbstractActor {
         return receiveBuilder()
                 .match(ContactMessage.class, this::onContactMessage)
                 .match(InterestEventMessage.class, this::onInterestEventMessage)
-                //.match(NotificationMessage.class, this::onNotificationMessage)
                 .build();
     }
 
     void onContactMessage(ContactMessage msg) {
-        contactIds.add(msg.contactId);
-        System.out.println(String.format("[%s, id:%d]: added %d to contact list",  getContext().getSelf().path().name(), id, msg.contactId));
+        if (contactIds.add(msg.contactId)) {
+            System.out.println(String.format("[%s, id:%d]: added %d to contact list",
+                    getContext().getSelf().path().name(), id, msg.contactId));
+        }
     }
 
     void onInterestEventMessage(InterestEventMessage msg) {
-        contactIds.forEach(val -> {
-            sender().tell(new NotificationMessage(val), self());
-            System.out.println(String.format("[%s, id:%d]: must notify device %d",  getContext().getSelf().path().name(), id, val));
-        });
+        contactIds.forEach(val -> sender().tell(new NotificationMessage(val), self()));
     }
-
-//    void onNotificationMessage(NotificationMessage msg) {
-//        // getContext().getSelf().path().name() is used to find the name of the actor, maybe there is a more proper way
-//    }
 
     static Props props(int id) {
         return Props.create(DeviceActor.class, id);

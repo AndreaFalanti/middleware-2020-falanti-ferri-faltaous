@@ -73,6 +73,7 @@ public class Server {
 
         // Finalize connection to broker and setup subscriptions
         client.connect(options);
+        System.out.println("Connected to MQTT broker: tcp://test.mosquitto.org:1883");
         client.subscribe(CONTACT_TOPIC, QOS_LEVEL);
         client.subscribe(EVENT_TOPIC, QOS_LEVEL);
 

@@ -1,12 +1,11 @@
 package com.polimi.falanti_ferri_faltaous.project1;
 
-import akka.actor.AbstractActor;
-import akka.actor.ActorRef;
-import akka.actor.Props;
-import com.google.gson.Gson;
+import akka.actor.*;
+import akka.japi.pf.DeciderBuilder;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +17,20 @@ public class ServerActor extends AbstractActor {
 
 	public ServerActor(MqttClient client) {
 		this.client = client;
-		childRefMap = new HashMap<>();
+		this.childRefMap = new HashMap<>();
+	}
+
+	private static SupervisorStrategy strategy =
+			new OneForOneStrategy(
+					10,
+					Duration.ofMinutes(1),
+					DeciderBuilder
+							.match(Exception.class, e -> SupervisorStrategy.restart())
+							.build());
+
+	@Override
+	public SupervisorStrategy supervisorStrategy() {
+		return strategy;
 	}
 
 	@Override

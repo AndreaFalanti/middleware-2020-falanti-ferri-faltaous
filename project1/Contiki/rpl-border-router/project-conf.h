@@ -45,6 +45,7 @@
 
 /* Disable PROP_MODE on CC1350 */
 #define CC13XX_CONF_PROP_MODE 0
+
 /*---------------------------------------------------------------------------*/
 
 #endif /* PROJECT_CONF_H_ */

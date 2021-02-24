@@ -42,21 +42,21 @@
 /*---------------------------------------------------------------------------*/
 /* User configuration */
 /*---------------------------------------------------------------------------*/
-#define MQTT_DEMO_STATUS_LED  LEDS_GREEN
-#define MQTT_DEMO_TRIGGER_LED LEDS_RED
-#define MQTT_DEMO_PUBLISH_TRIGGER &button_left_sensor
 
-#define MQTT_DEMO_PUBLISH_TOPIC_ENCOUNTER   "iot/encounter/json"
-#define MQTT_DEMO_PUBLISH_TOPIC_INTEREST   "iot/interest/json"
+#define MQTT_PUBLISH_TOPIC_ENCOUNTER   "iot/encounter/json"
+#define MQTT_PUBLISH_TOPIC_INTEREST   "iot/interest/json"
+#define MQTT_PUBLISH_TOPIC_NOTIFICATION      "iot/notification/json"
 
-#define MQTT_DEMO_SUB_TOPIC_INTEREST       "iot/interest/json"
-#define MQTT_DEMO_SUB_TOPIC_ENCOUNTER      "iot/encounter/json"
+#define MQTT_SUB_TOPIC_INTEREST       "iot/interest/json"
+#define MQTT_SUB_TOPIC_ENCOUNTER      "iot/encounter/json"
+#define MQTT_SUB_TOPIC_NOTIFICATION      "iot/notification/json"
 
-#define MQTT_DEMO_BROKER_IP_ADDR "fd00::1"
+#define MQTT_CLIENT_CONF_USERNAME "mqtt-client-username"
+#define MQTT_BROKER_IP_ADDR "fd00::1"
 //*---------------------------------------------------------------------------*/
 #define IEEE802154_CONF_DEFAULT_CHANNEL      21
 //*---------------------------------------------------------------------------*/
-#define NATIVE_TEMPERATURE 25
+
 //*---------------------------------------------------------------------------*/
 #endif /* PROJECT_CONF_H_ */
 /*---------------------------------------------------------------------------*/

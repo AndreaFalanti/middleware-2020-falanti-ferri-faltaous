@@ -32,6 +32,11 @@
 
 #include "contiki.h"
 
+#include "net/routing/routing.h"
+#include "net/netstack.h"
+#include "net/ipv6/simple-udp.h"
+
+#include "sys/log.h"
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "RPL BR"
@@ -45,11 +50,15 @@ AUTOSTART_PROCESSES(&contiki_ng_br);
 PROCESS_THREAD(contiki_ng_br, ev, data)
 {
   PROCESS_BEGIN();
+  
+  /* Initialize DAG root -- specifica che è un root */
+  NETSTACK_ROUTING.root_start();
 
 #if BORDER_ROUTER_CONF_WEBSERVER
   PROCESS_NAME(webserver_nogui_process);
   process_start(&webserver_nogui_process, NULL);
 #endif /* BORDER_ROUTER_CONF_WEBSERVER */
+	
 
   LOG_INFO("Contiki-NG Border Router started\n");
 

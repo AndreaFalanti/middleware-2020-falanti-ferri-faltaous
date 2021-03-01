@@ -28,10 +28,6 @@
 #define UDP_BROAD_PORT 4321
 #define UDP_SERVER_PORT	5678
 
-//static struct simple_udp_connection udp_conn;
-
-#define START_INTERVAL		(15 * CLOCK_SECOND)
-#define SEND_INTERVAL		(60 * CLOCK_SECOND)
 
 /*---------------------------------------------------------------------------*/
 /*
@@ -99,7 +95,7 @@ static uint8_t state;
 /*---------------------------------------------------------------------------*/
 
 #define START_INTERVAL		(15 * CLOCK_SECOND)
-#define SEND_INTERVAL		  (60 * CLOCK_SECOND)
+#define SEND_INTERVAL		  (15 * CLOCK_SECOND)
 
 //static struct simple_udp_connection udp_conn;
 static struct simple_udp_connection broadcast_connection;
@@ -118,7 +114,7 @@ typedef struct mqtt_client_config {
 } 	mqtt_client_config_t;
 /*---------------------------------------------------------------------------*/
 /* Maximum TCP segment size for outgoing segments of our socket */
-#define MAX_TCP_SEGMENT_SIZE    64
+#define MAX_TCP_SEGMENT_SIZE 512
 /*---------------------------------------------------------------------------*/
 /*
  * Buffers for Client ID and Topic.
@@ -164,7 +160,7 @@ construct_pub_topic(void)
 static int
 construct_sub_topic(void)
 {
-	snprintf(sub_topic_notification, BUFFER_SIZE, MQTT_SUB_TOPIC_NOTIFICATION);
+	snprintf(sub_topic_notification, BUFFER_SIZE,"%s/%d/json", MQTT_SUB_TOPIC_NOTIFICATION,node_id);
 	return 1;
 }
 /*---------------------------------------------------------------------------*/
@@ -224,10 +220,11 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 	case MQTT_EVENT_PUBLISH: {
 		msg_ptr = data;
 		const char *a = (char *)msg_ptr->payload_chunk;
+		
 		const int i = strcspn(a,"}");
 		char node[25];
 
-		snprintf(node,25,"{targetId: %d}",node_id); 
+		snprintf(node,25,"{\"targetId\": %d}",node_id); 
 
 		if(strncmp(a,node,i)==0){
 			if(msg_ptr->first_chunk) {

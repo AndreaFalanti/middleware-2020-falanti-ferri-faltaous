@@ -38,6 +38,7 @@
 #define PROJECT_CONF_H_
 /*---------------------------------------------------------------------------*/
 /* Enable TCP */
+#define UIP_CONF_RECEIVE_WINDOW 32000
 #define UIP_CONF_TCP 1
 /*---------------------------------------------------------------------------*/
 /* User configuration */
@@ -47,9 +48,7 @@
 #define MQTT_PUBLISH_TOPIC_INTEREST   "iot/interest/json"
 #define MQTT_PUBLISH_TOPIC_NOTIFICATION      "iot/notification/json"
 
-#define MQTT_SUB_TOPIC_INTEREST       "iot/interest/json"
-#define MQTT_SUB_TOPIC_ENCOUNTER      "iot/encounter/json"
-#define MQTT_SUB_TOPIC_NOTIFICATION      "iot/notification/json"
+#define MQTT_SUB_TOPIC_NOTIFICATION      "iot/notification"
 
 #define MQTT_CLIENT_CONF_USERNAME "mqtt-client-username"
 #define MQTT_BROKER_IP_ADDR "fd00::1"

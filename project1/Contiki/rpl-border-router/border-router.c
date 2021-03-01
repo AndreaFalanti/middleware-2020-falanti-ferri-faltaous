@@ -40,8 +40,8 @@
 /* Log configuration */
 #include "sys/log.h"
 #define LOG_MODULE "RPL BR"
-#define LOG_LEVEL LOG_LEVEL_INFO
-
+#define LOG_LEVEL LOG_LEVEL_DBG
+#define DEBUG 1 
 /* Declare and auto-start this file's process */
 PROCESS(contiki_ng_br, "Contiki-NG Border Router");
 AUTOSTART_PROCESSES(&contiki_ng_br);
@@ -53,8 +53,9 @@ PROCESS_THREAD(contiki_ng_br, ev, data)
   
   /* Initialize DAG root -- specifica che è un root */
   NETSTACK_ROUTING.root_start();
-
+  
 #if BORDER_ROUTER_CONF_WEBSERVER
+  // definisce un processo con quel nome  e dichiara il PROCESS_THREAD con quel nome
   PROCESS_NAME(webserver_nogui_process);
   process_start(&webserver_nogui_process, NULL);
 #endif /* BORDER_ROUTER_CONF_WEBSERVER */

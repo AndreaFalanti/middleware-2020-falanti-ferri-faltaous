@@ -75,8 +75,8 @@
 		\item An individual must be continuously exposed to the virus for 10 minutes to be infected, otherwise the virus has no effect at all (project specifications are a bit vague).
 		\item If an individual would go out of the simulation space, it simply inverts its direction.
 		\item Parameter v is intended as the max speed possible for an individual, but each individual has a different velocity that is not modified during simulation (text is vague about it).
-		\item Each individual position is defined by the input file (Generated randomly).
-		\item Each country has same dimensions w,l, if they are not divisors of W and L then the final country of each row / column has as dimensions the remaining space. 
+		\item Each individual position is defined by the input file (generated randomly).
+		\item Each country has same dimensions w,l. If they are not divisors of W and L then the final country of each row / column has as dimensions the remaining space (rest of the division). 
 	\end{itemize}
 	
 	\section{Implementation}
@@ -87,7 +87,7 @@
 	
 	\subsection{Simulator}
 	\subsubsection{MPI initialization}
-	As initial step, MPI is initialized and the structs defined in the program that are also used in MPI operations are serialized in a MPI\_Datatype format. Also, a custom MPI\_OP is defined for the country\_report struct, that will be used in a MPI\_Reduce operation explained later in the document. All the processes are part of the default MPI\_COMM\_WORLD communicator. 
+	As initial step, MPI is initialized and the structs defined in the program, that are also used in MPI operations, are serialized in a MPI\_Datatype format. Also, a custom MPI\_OP is defined for the country\_report struct, that will be used in a MPI\_Reduce operation explained later in the document. All the processes are part of the default MPI\_COMM\_WORLD communicator. 
 	
 	MPI usually defines as root processor the processor 0, we followed this convention in our program. The root coordinates the MPI operations and communications between the processes and therefore has a more complex flow compared to other processes.
 	
@@ -108,7 +108,7 @@
 	\begin{itemize}
 		\item The status of each individual is updated, in particular a counter of the individual struct is incremented when the individual is infected or immune and after the threshold defined by problem specification is reached then the status is updated and the counter reset (taking care of excess time in the simulation step). If an individual is susceptible, instead, the program checks if an infected individual is nearby (distance $ \le d $): if so, the counter is updated with a mechanism similar to other cases, otherwise it is reset to 0 (see assumptions at section \ref{assumptions}).
 		\item The position of each individual is updated.
-		\item Status and position of individuals in infected list is updated. Some of them could be already handled in the individuals partition, but are separate entities (no references) so it cause no problems. No stochasticity is involved in the simulation (with given assumptions and simplifications), therefore the infected list will be the same for each process after an update. This avoids to communicate back and fourth the infected individuals at each step.
+		\item Status and position of individuals in infected list is updated. Some of them could be already handled in the individuals partition, but are separate entities (no references) so it cause no problems. No stochasticity is involved in the simulation (with given assumptions and simplifications), therefore the infected list will be the same for each process after an update. Repeating these computations avoids the necessity to communicate back and forth the infected individuals to each process at each simulation step.
 		\item Returns the total amount of infected individuals in the simulation step, for each process. 
 	\end{itemize}
 

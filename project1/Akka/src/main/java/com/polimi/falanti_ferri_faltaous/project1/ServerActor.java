@@ -63,8 +63,8 @@ public class ServerActor extends AbstractActor {
 
 		// send to MQTT topic
 		client.publish(
-				Server.NOTIFICATION_TOPIC, // topic
-				String.format("{targetId: %d}", msg.targetId).getBytes(UTF_8), // payload
+				"iot/notification/" + msg.targetId + "/json", // topic
+				String.format("{\"targetId\": %d}", msg.targetId).getBytes(UTF_8), // payload
 				Server.QOS_LEVEL, // QoS
 				false); // retained?
 	}

@@ -46,7 +46,6 @@
 
 #define MQTT_PUBLISH_TOPIC_ENCOUNTER   "iot/encounter/json"
 #define MQTT_PUBLISH_TOPIC_INTEREST   "iot/interest/json"
-#define MQTT_PUBLISH_TOPIC_NOTIFICATION      "iot/notification/json"
 
 #define MQTT_SUB_TOPIC_NOTIFICATION      "iot/notification"
 

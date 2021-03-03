@@ -15,11 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-
-
-
-
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
@@ -43,12 +38,6 @@ static const char *broker_ip = MQTT_BROKER_IP_ADDR;
  */
 #define STATE_MACHINE_PERIODIC     (CLOCK_SECOND >> 1)
 /*---------------------------------------------------------------------------*/
-/* Provide visible feedback via LEDS during various states */
-/* When connecting to broker */
-#define CONNECTING_LED_DURATION    (CLOCK_SECOND >> 2)
-
-/* Each time we try to publish */
-#define PUBLISH_LED_ON_DURATION    (CLOCK_SECOND)
 /*---------------------------------------------------------------------------*/
 /* Connections and reconnections */
 #define RETRY_FOREVER              0xFF
@@ -83,14 +72,13 @@ static uint8_t state;
 /*---------------------------------------------------------------------------*/
 /* A timeout used when waiting to connect to a network */
 #define NET_CONNECT_PERIODIC        (CLOCK_SECOND >> 2)
-#define NO_NET_LED_DURATION         (NET_CONNECT_PERIODIC >> 1)
 /*---------------------------------------------------------------------------*/
 /* Default configuration values */
 #define DEFAULT_TYPE_ID             "native"
 #define DEFAULT_AUTH_TOKEN          "AUTHTOKEN"
 #define DEFAULT_SUBSCRIBE_CMD_TYPE  "+"
 #define DEFAULT_BROKER_PORT         1883
-#define DEFAULT_PUBLISH_INTERVAL    (75 * CLOCK_SECOND)
+#define DEFAULT_PUBLISH_INTERVAL    (60 * CLOCK_SECOND)
 #define DEFAULT_KEEP_ALIVE_TIMER    60
 /*---------------------------------------------------------------------------*/
 
@@ -126,7 +114,6 @@ typedef struct mqtt_client_config {
 static char client_id[BUFFER_SIZE];
 static char pub_topic_encounter[BUFFER_SIZE];
 static char pub_topic_interest[BUFFER_SIZE];
-static char pub_topic_notification[BUFFER_SIZE];
 static char sub_topic_notification[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
@@ -152,8 +139,7 @@ static int
 construct_pub_topic(void)
 {
 	snprintf(pub_topic_encounter, BUFFER_SIZE, MQTT_PUBLISH_TOPIC_ENCOUNTER);
-	snprintf(pub_topic_interest, BUFFER_SIZE, MQTT_PUBLISH_TOPIC_INTEREST);  
-	snprintf(pub_topic_notification, BUFFER_SIZE, MQTT_PUBLISH_TOPIC_NOTIFICATION); 
+	snprintf(pub_topic_interest, BUFFER_SIZE, MQTT_PUBLISH_TOPIC_INTEREST); 	
 	return 1;
 }
 /*---------------------------------------------------------------------------*/
@@ -207,7 +193,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 	switch(event) {
 	case MQTT_EVENT_CONNECTED: {
 		LOG_INFO("Application has a MQTT connection!\n");
-		//timer_set(&connection_life, CONNECTION_STABLE_TIME);
+		timer_set(&connection_life, CONNECTION_STABLE_TIME);
 		state = STATE_CONNECTED;
 		break;
   	}
@@ -382,7 +368,7 @@ connect_to_broker(void)
 static void
 state_machine(void)
 {
- // static struct etimer periodic_timer;
+
 	switch(state) {
 	case STATE_INIT:
 		/* If we have just been configured register MQTT connection */
@@ -430,14 +416,13 @@ state_machine(void)
 			state = STATE_PUBLISHING;
       		} else {  
       			publish();
-	
-	
+		
       		}
-      	etimer_set(&publish_periodic_timer,  conf.pub_interval);
+	      	etimer_set(&publish_periodic_timer,  conf.pub_interval);
 
-      	LOG_INFO("Publishing\n");
-      /* Return here so we don't end up rescheduling the timer */
-      	return;
+	      	LOG_INFO("Publishing\n");
+	      /* Return here so we don't end up rescheduling the timer */
+	      	return;
     	} else {
       /*
        * Our publish timer fired, but some MQTT packet is already in flight
@@ -451,25 +436,26 @@ state_machine(void)
 
 		LOG_INFO("Publishing... (MQTT state=%d, q=%u)\n", conn.state,
         	conn.out_queue_full);
+
     	}	
    	break;
   	case STATE_DISCONNECTED:
     		LOG_INFO("Disconnected\n");
     		if(connect_attempt < RECONNECT_ATTEMPTS ||
        		RECONNECT_ATTEMPTS == RETRY_FOREVER) {
-      		/* Disconnect and backoff */
-      		clock_time_t interval;
-      		mqtt_disconnect(&conn);
-      		connect_attempt++;
+	      		/* Disconnect and backoff */
+	      		clock_time_t interval;
+	      		mqtt_disconnect(&conn);
+	      		connect_attempt++;
 
-      		interval = connect_attempt < 3 ? RECONNECT_INTERVAL << connect_attempt :RECONNECT_INTERVAL << 3;
+	      		interval = connect_attempt < 3 ? RECONNECT_INTERVAL << connect_attempt :RECONNECT_INTERVAL << 3;
 
-      		LOG_INFO("Disconnected: attempt %u in %lu ticks\n", connect_attempt, interval);
+	      		LOG_INFO("Disconnected: attempt %u in %lu ticks\n", connect_attempt, interval);
 
-      		etimer_set(&publish_periodic_timer, interval);
+	      		etimer_set(&publish_periodic_timer, interval);
 
-      		state = STATE_REGISTERED;
-      		return;
+	      		state = STATE_REGISTERED;
+	      		return;
     		} else {
       			/* Max reconnect attempts reached; enter error state */
       			state = STATE_ERROR;
@@ -518,7 +504,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
     	if(NETSTACK_ROUTING.node_is_reachable() && NETSTACK_ROUTING.get_root_ipaddr(&dest_ipaddr)) {
       
 		if(state == STATE_PUBLISHING ){
-		//creazione link temporaneo?
+		//creazione link broad
 			uip_create_linklocal_allnodes_mcast(&broad_addr);
                 	if(mqtt_ready(&conn)){
 				simple_udp_sendto(&broadcast_connection, &node_id, sizeof(node_id), &broad_addr);

@@ -19,7 +19,7 @@ public class Server {
     public static final String CONTACT_TOPIC = "iot/encounter/json";
     public static final String EVENT_TOPIC = "iot/interest/json";
     public static final String NOTIFICATION_TOPIC = "iot/notification/json";
-    public static final int QOS_LEVEL = 1;
+    public static final int QOS_LEVEL = 0;
 
     public static void main(String[] args) throws MqttException {
         Gson gson = new Gson();

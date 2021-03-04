@@ -215,7 +215,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 		if(strncmp(a,node,i)==0){
 			if(msg_ptr->first_chunk) {
 				msg_ptr->first_chunk = 0;
-				LOG_INFO("Application received a publish on topic '%s': %s \n",msg_ptr->topic,a);
+				LOG_INFO("Application received a publish on topic '%s': %s \n",msg_ptr->topic,node);
 			}
 		}
 		break;

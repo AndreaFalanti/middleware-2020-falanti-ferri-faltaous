@@ -171,7 +171,7 @@ udp_rx_callback(struct simple_udp_connection *c,
 	len = snprintf(buf_ptr, remaining,
                  "{\"senderId\":%d,"
 		 "\"contactId\":%d"
-		 "}",node_sender,node_id
+		 "}",node_id,node_sender
                  );
 	
 	buf_ptr += len;

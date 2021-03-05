@@ -17,6 +17,8 @@
 \usepackage{blindtext}
 
 \usepackage{tabularx}
+\usepackage{url}
+\usepackage{hyperref}
 
 \PassOptionsToPackage{hyphens}{url}\usepackage{hyperref}
 \hypersetup{
@@ -59,26 +61,28 @@
 	
 	\section{Implementation}
 	\subsection{Technologies used}
-	The implementation requires to use the COOJA simulator of ContikiNG for the network simulation of the IoT devices. For the backend we decided to use Akka. We decided to use publish/subscribe architecture style for the communication between the simulator and Akka. The communication happens through MQTT, as a bridge between Akka and COOJA motes.
+	The implementation requires to use the COOJA simulator of ContikiNG for the network simulation of the IoT devices. For the backend we decided to use Akka, because every device can be easily modeled as an Akka actor, allowing to handle them in a parallel and independent way. We decided to use publish/subscribe architecture style for the communication between the simulator and Akka. The communication happens through MQTT, as a bridge between Akka and motes. We have choosen MQTT because it is a protocol oriented to the IoT, supported by ContikiNG natively, that help us implement a bidirectional communication between the motes and the backend easily. Moreover it is a higher-level protocol compared to other alternatives, such as sockets, thus it is easier to debug and develop with.  
 	
 	\subsection{ContikiNG}
-	For the simulation of the IoT devices we use nodes to publish and subscribe and a rpl border router to allow nodes to connect to the broker on our machine. We decided also to use the broker Mosquitto, that is already installed on the provided virtual machine, to finalize the publish/subscribe through MQTT. Nodes implement three main functionalities:
+	For the simulation of the IoT devices we use nodes to publish and subscribe and a rpl border router to allow nodes to connect to the broker on our machine. We decided also to use the broker Mosquitto, that is already installed on the provided virtual machine, to finalize the publish/subscribe through MQTT.
+	Nodes implement three main functionalities:
 	
 	\begin{itemize}
 		\item 	First,  nodes use a state machine to connect with MQTT to the message broker and then publish data periodically (these data represent the events of interest).    
 		\item   Second,	 is to send in broadcast to all other visible nodes its own id. This is implemented using udp on an IP address set to the link local all-nodes multi-cast address. When a node receives this kind of message, it performs a callback, that allows that node to publish its own id and the id of the sender of the message.
 		\item	Third, nodes receive data from their subscription through MQTT.	
 	\end{itemize}
-	
-	In our implementation there are three topics: one used for messages about contacts between two people, one for the events of interest and one for the notifications. Our nodes publish on the first two topic, while are subscribed to the third one, vice versa for Akka which is subscribed to the first two topics and publish on the third one. When a node from the simulation published a message on a topic, the broker on our machine takes care to publish it on a broker server, in our case \textit{test.mosquitto.org:1883}. 
+	We used two proto-thread to implement these functionalities. One proto-thread handles the second and the third functionality, and one handles the second one. We decide to use a state machine in a proto-thread that makes simpler to handle connection, publication, subscription of MQTT. \\
+	In our implementation there are three main topic categories: one used for messages about contacts between two people, one for the events of interest and \textit{n} for the notifications, where \textit{n} is the number of the motes used in the COOJA simulation. Our nodes publish on the first two topics, which are unique and shared among all devices, while they are subscribed to their own notification topic. Vice versa, Akka is subscribed to the first two topics and publish on each node's topic. When a node from the simulation published a message on a topic, the broker on our machine takes care to publish it on a broker server, in our case \textit{test.mosquitto.org:1883}. 
 	We need a bridge to publish/subscribe from local broker to remote broker, so we need to configure the local broker as follow:\\
 	\\
 	\texttt{connection bridge-01 \\
-	address test.mosquitto.org:1883 \\
-	topic \# out 1 \\
-	topic \# in 1  \\}
+		address test.mosquitto.org:1883 \\
+		topic iot/encounter/json out 1 \\
+		topic iot/interest/json out 1 \\
+		topic iot/notification/\# in 1  \\}
 	\\
-	The first line is the connection name that we choose ('bridge-01'). The second line says the address of the remote broker. The last two rows allow to bridge all topic since we are using the wildcard '\#', 'in' specifies on which topic the broker can receive from the remote broker and 'out' specifies on which topic the broker can publish on the remote broker. '1' term express the QoS (quality of service), which for MQTT is "at-least-once". Moreover to connect correctly to our broker we need to define a unique client-id, username and a password (username and password not need to be unique). 
+	The first line is the connection name that we choose ('bridge-01'). The second line says the address of the remote broker. The last three rows allow to bridge the specified topics, 'in' specifies on which topic the broker can receive from the remote broker and 'out' specifies on which topic the broker can publish on the remote broker, note that in the last topic '\#' is a wildcard that indicates each topic, so in this case each subtopic under 'iot/notification'. '1' term express the QoS (quality of service), which for MQTT is "at-least-once". Moreover to connect correctly to our broker we need to define a unique client-id, username and a password (username and password not need to be unique). 
 	
 	\subsection{Akka}
 	The backend server is realized by using the Akka middleware and its composed by three main parts:
@@ -89,6 +93,7 @@
 		\item the device actors, that represent a digital abstraction of the physical IoT devices. In our case they simply store the set of ids of devices with which they have contacts. When they receive contact messages they simply add the ids to the set. When they receive an event message, they produce and send notification messages to the server actor, one for each device to contact.
 	\end{itemize}      
 	
+	It is important to note that we used different QoS for MQTT communication in Akka server and for MQTT communication in motes. In fact in the backend QoS is '0', that means 'at-most-once' delivery, while in motes QoS is '1', that means 'at-least-once' delivery. This is due to the fact that our motes cannot send the publish ack to the MQTT broker, since they use a library that doesn't implement acks for QoS greater than '0', due to this the broker sends again periodically the messages that are not acked, as we can see in the following link : \url{https://github.com/contiki-ng/contiki-ng/issues/605}    
 	
 	
 \end{document}
